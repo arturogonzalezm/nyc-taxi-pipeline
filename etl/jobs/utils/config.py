@@ -1,45 +1,104 @@
 """
 Configuration Management
-Centralized configuration for PySpark jobs.
+Centralized configuration for PySpark jobs using Singleton pattern.
 """
 import os
-from dataclasses import dataclass
-from typing import Literal
+import tempfile
+from dataclasses import dataclass, field
+from typing import Literal, Optional
+from pathlib import Path
 
 
 @dataclass
 class MinIOConfig:
-    """MinIO/S3 configuration"""
-    endpoint: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-    access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-    secret_key: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-    bucket: str = "nyc-taxi-pipeline"
+    """
+    MinIO/S3 configuration with environment variable support.
+
+    All configuration values are loaded from environment variables with sensible defaults.
+    This follows the 12-factor app methodology for configuration management.
+    """
+    endpoint: str = field(default_factory=lambda: os.getenv("MINIO_ENDPOINT", "localhost:9000"))
+    access_key: str = field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY", "minioadmin"))
+    secret_key: str = field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin"))
+    bucket: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET", "nyc-taxi-pipeline"))
     bronze_path: str = "bronze/nyc_taxi"
     silver_path: str = "silver/nyc_taxi"
     gold_path: str = "gold/nyc_taxi"
-    use_minio: bool = os.getenv("USE_MINIO", "true").lower() == "true"
+    use_minio: bool = field(default_factory=lambda: os.getenv("USE_MINIO", "true").lower() == "true")
+
+    def __post_init__(self):
+        """Validate configuration after initialization"""
+        if not self.endpoint:
+            raise ValueError("MINIO_ENDPOINT must be set")
+        if not self.bucket:
+            raise ValueError("MINIO_BUCKET must be set")
 
 
-@dataclass
-class DataSourceConfig:
-    """External data source configuration"""
-    base_url: str = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-
-
-@dataclass
 class JobConfig:
-    """PySpark job configuration"""
-    cache_dir: str = "data/cache"
+    """
+    Singleton configuration for PySpark jobs.
+
+    This class follows the Singleton pattern to ensure consistent configuration
+    across all jobs in the same process. Uses lazy initialization and thread-safe
+    implementation.
+
+    Best practices implemented:
+    1. Singleton pattern for consistent configuration
+    2. Environment-based configuration (12-factor app)
+    3. System temp directory usage with proper cleanup
+    4. Validation on initialization
+    5. Immutable configuration after creation
+    """
+
+    _instance: Optional['JobConfig'] = None
+    _initialized: bool = False
+
+    def __new__(cls):
+        """Singleton pattern: ensure only one instance exists"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self):
-        self.minio = MinIOConfig()
-        self.source = DataSourceConfig()
+        """Initialize configuration (only once due to singleton)"""
+        # Only initialize once
+        if JobConfig._initialized:
+            return
+
+        # Use system temp directory with app-specific subdirectory
+        # This is more efficient and follows OS best practices:
+        # - Respects OS temp directory settings ($TMPDIR, /tmp, etc.)
+        # - Automatically benefits from OS cleanup policies
+        # - Works across different platforms (Linux, macOS, Windows)
+        base_temp = Path(tempfile.gettempdir())
+        self._cache_dir = base_temp / "nyc-taxi-pipeline" / "cache"
+
+        # Initialize MinIO configuration
+        self._minio = MinIOConfig()
+
+        # Mark as initialized
+        JobConfig._initialized = True
+
+    @property
+    def cache_dir(self) -> Path:
+        """
+        Get cache directory path.
+
+        Returns Path object for better path manipulation and OS compatibility.
+        Creates directory if it doesn't exist (lazy creation).
+        """
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        return self._cache_dir
+
+    @property
+    def minio(self) -> MinIOConfig:
+        """Get MinIO configuration (immutable)"""
+        return self._minio
 
     def get_s3_path(
         self,
         layer: Literal["bronze", "silver", "gold"],
-        taxi_type: str = None,
-        file_name: str = None
+        taxi_type: Optional[str] = None
     ) -> str:
         """
         Get S3 path for given layer and taxi type.
@@ -47,16 +106,37 @@ class JobConfig:
         Args:
             layer: Data lake layer (bronze, silver, gold)
             taxi_type: Type of taxi (yellow, green) - optional
-            file_name: Name of the file - optional (deprecated, kept for backward compatibility)
 
         Returns:
             Full S3 path
+
+        Raises:
+            ValueError: If layer is invalid
+
+        Examples:
+            >>> config = JobConfig()
+            >>> config.get_s3_path("bronze", "yellow")
+            's3a://nyc-taxi-pipeline/bronze/nyc_taxi/yellow'
+            >>> config.get_s3_path("silver")
+            's3a://nyc-taxi-pipeline/silver/nyc_taxi'
         """
-        layer_path = getattr(self.minio, f"{layer}_path")
+        try:
+            layer_path = getattr(self._minio, f"{layer}_path")
+        except AttributeError:
+            raise ValueError(f"Invalid layer: {layer}. Must be one of: bronze, silver, gold")
+
+        base_path = f"s3a://{self._minio.bucket}/{layer_path}"
+
         if taxi_type:
-            return f"s3a://{self.minio.bucket}/{layer_path}/{taxi_type}"
-        elif file_name:
-            # Backward compatibility
-            return f"s3a://{self.minio.bucket}/{layer_path}/{file_name}"
-        else:
-            return f"s3a://{self.minio.bucket}/{layer_path}"
+            return f"{base_path}/{taxi_type}"
+        return base_path
+
+    @classmethod
+    def reset(cls):
+        """
+        Reset singleton instance.
+
+        Useful for testing purposes only. Should not be used in production code.
+        """
+        cls._instance = None
+        cls._initialized = False

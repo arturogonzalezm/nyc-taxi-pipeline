@@ -1,39 +1,124 @@
 """
-NYC Taxi Data Ingestion Job
-Ingests taxi trip data from NYC TLC to MinIO bronze layer.
+NYC Taxi Data Ingestion Job - Bronze Layer ETL.
+
+This module implements the ingestion pipeline for NYC Taxi trip data, downloading
+monthly parquet files from NYC TLC and storing them in the MinIO bronze layer with
+appropriate partitioning for Delta Lake and CDC operations.
+
+Architecture:
+    - Follows Medallion Architecture (Bronze/Silver/Gold layers)
+    - Bronze layer: Raw data with minimal transformation, metadata added
+    - Implements caching strategy: MinIO cache with local fallback
+    - Supports both single-month and bulk historical ingestion
+
+Data Quality:
+    - Validates data matches requested year/month
+    - Enforces schema types for critical columns
+    - Adds metadata for lineage tracking and CDC
+    - Logs data distribution and match percentages
+
+Partitioning Strategy:
+    - Partitioned by year and month for query optimization
+    - Supports Delta Lake operations
+    - Enables efficient CDC (Change Data Capture)
+    - Allows partition pruning for performance
+
+Design Patterns:
+    - Template Method: Inherits from BaseSparkJob
+    - Strategy: Configurable extract (MinIO cache vs source)
+    - Factory: Convenience functions for job creation
 """
 import os
 import requests
+import logging
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from pyspark.sql import DataFrame
+from minio import Minio
+from minio.error import S3Error
 
-from ..base_job import BaseSparkJob
+from ..base_job import BaseSparkJob, JobExecutionError
 from ..utils.config import JobConfig
+
+
+logger = logging.getLogger(__name__)
+
+
+class DataValidationError(JobExecutionError):
+    """Raised when data validation fails during ingestion"""
+    pass
+
+
+class DownloadError(JobExecutionError):
+    """Raised when data download from NYC TLC fails"""
+    pass
 
 
 class TaxiIngestionJob(BaseSparkJob):
     """
-    Ingestion job for NYC Taxi trip data.
-    Downloads data from NYC TLC and stores it in MinIO bronze layer.
+    Production-ready ingestion job for NYC Taxi trip data.
+
+    This job downloads monthly taxi trip data from NYC TLC, validates it, adds
+    metadata columns for lineage tracking, and loads it to the MinIO bronze layer
+    with year/month partitioning.
+
+    Features:
+        - MinIO-first caching with local fallback
+        - Data quality validation (year/month matching)
+        - Schema enforcement for critical columns
+        - Metadata addition for CDC and lineage tracking
+        - Partitioned storage for Delta Lake compatibility
+        - Comprehensive error handling and logging
+
+    Data Flow:
+        Extract -> Transform -> Load
+        1. Extract: Download from NYC TLC (or use MinIO/local cache)
+        2. Transform: Validate, enforce schema, add metadata (no business logic)
+        3. Load: Write to MinIO bronze layer with partitioning
+
+    Example:
+        >>> # Single month ingestion
+        >>> job = TaxiIngestionJob("yellow", 2024, 1)
+        >>> success = job.run()
+        >>>
+        >>> # Bulk historical ingestion
+        >>> results = run_bulk_ingestion("yellow", 2024, 1, 2024, 12)
+
+    Attributes:
+        taxi_type: Type of taxi data (yellow or green)
+        year: Year of data to ingest
+        month: Month of data to ingest (1-12)
+        file_name: Generated filename for the parquet file
     """
+
+    # Class constants
+    NYC_TLC_BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
+    VALID_TAXI_TYPES = ["yellow", "green"]
+    MIN_YEAR = 2009  # NYC TLC data starts from 2009
+    MIN_MATCH_PERCENTAGE = 50.0  # Warn if less than 50% of records match requested period
 
     def __init__(
         self,
         taxi_type: Literal["yellow", "green"],
         year: int,
         month: int,
-        config: JobConfig = None
+        config: Optional[JobConfig] = None
     ):
         """
-        Initialize the ingestion job.
+        Initialize the taxi data ingestion job.
 
         Args:
-            taxi_type: Type of taxi (yellow or green)
-            year: Year of the data
-            month: Month of the data
-            config: Job configuration
+            taxi_type: Type of taxi data to ingest (yellow or green)
+            year: Year of the data (2009 or later)
+            month: Month of the data (1-12)
+            config: Optional job configuration (uses default singleton if not provided)
+
+        Raises:
+            ValueError: If taxi_type, year, or month are invalid
         """
+        # Validate parameters before calling super().__init__
+        self._validate_parameters(taxi_type, year, month)
+
         super().__init__(
             job_name=f"TaxiIngestion_{taxi_type}_{year}_{month:02d}",
             config=config
@@ -43,8 +128,42 @@ class TaxiIngestionJob(BaseSparkJob):
         self.month = month
         self.file_name = f"{taxi_type}_tripdata_{year}-{month:02d}.parquet"
 
+    @staticmethod
+    def _validate_parameters(
+        taxi_type: str,
+        year: int,
+        month: int
+    ) -> None:
+        """
+        Validate job parameters before initialization.
+
+        Args:
+            taxi_type: Type of taxi (yellow or green)
+            year: Year of data
+            month: Month of data
+
+        Raises:
+            ValueError: If any parameter is invalid
+        """
+        if taxi_type not in TaxiIngestionJob.VALID_TAXI_TYPES:
+            raise ValueError(
+                f"Invalid taxi_type: {taxi_type}. "
+                f"Must be one of {TaxiIngestionJob.VALID_TAXI_TYPES}"
+            )
+
+        if not isinstance(year, int) or year < TaxiIngestionJob.MIN_YEAR:
+            raise ValueError(
+                f"Invalid year: {year}. "
+                f"Must be integer >= {TaxiIngestionJob.MIN_YEAR}"
+            )
+
+        if not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError(f"Invalid month: {month}. Must be integer between 1 and 12")
+
     def validate_inputs(self):
-        """Validate job inputs"""
+        """
+        Validate job inputs
+        """
         if self.taxi_type not in ["yellow", "green"]:
             raise ValueError(f"Invalid taxi type: {self.taxi_type}")
 
@@ -64,7 +183,9 @@ class TaxiIngestionJob(BaseSparkJob):
         return self._extract_from_source()
 
     def _extract_from_minio(self) -> DataFrame:
-        """Load data from MinIO bronze layer (used by downstream jobs)"""
+        """
+        Load data from MinIO bronze layer (used by downstream jobs)
+        """
         s3_path = self.config.get_s3_path("bronze", taxi_type=self.taxi_type)
         self.logger.info(f"Loading from MinIO: {s3_path}")
         # Read with partition filters for performance
@@ -72,30 +193,198 @@ class TaxiIngestionJob(BaseSparkJob):
         return self.spark.read.parquet(partition_path)
 
     def _extract_from_source(self) -> DataFrame:
-        """Download and load data from NYC TLC"""
-        # NYC TLC provides monthly parquet files via their CDN
-        url = f"https://d37ci6vzurychx.cloudfront.net/trip-data/{self.file_name}"
+        """
+        Download and load data from NYC TLC with intelligent caching.
 
+        Caching Strategy:
+            1. Check MinIO cache (if enabled)
+            2. If cache miss, download from NYC TLC
+            3. Upload to MinIO cache for future use
+            4. Fallback to local cache if MinIO fails
+
+        Returns:
+            DataFrame containing raw trip data from source
+
+        Raises:
+            DownloadError: If download from NYC TLC fails
+            JobExecutionError: If data cannot be loaded
+        """
+        # NYC TLC provides monthly parquet files via their CDN
+        url = f"{self.NYC_TLC_BASE_URL}/{self.file_name}"
+
+        if self.config.minio.use_minio:
+            try:
+                return self._extract_with_minio_cache(url)
+            except Exception as e:
+                self.logger.error(f"MinIO cache operation failed: {e}")
+                self.logger.warning("Falling back to local cache")
+                # Fall through to local cache
+
+        # Local cache fallback (if MinIO disabled or error)
+        return self._extract_with_local_cache(url)
+
+    def _get_minio_client(self) -> Minio:
+        """
+        Create and return configured MinIO client.
+
+        Returns:
+            Initialized Minio client
+
+        Raises:
+            JobExecutionError: If MinIO client creation fails
+        """
+        try:
+            endpoint = self.config.minio.endpoint.replace("http://", "").replace("https://", "")
+            minio_client = Minio(
+                endpoint,
+                access_key=self.config.minio.access_key,
+                secret_key=self.config.minio.secret_key,
+                secure=False
+            )
+            return minio_client
+        except Exception as e:
+            raise JobExecutionError(f"Failed to create MinIO client: {e}") from e
+
+    def _extract_with_minio_cache(self, url: str) -> DataFrame:
+        """
+        Extract data using MinIO cache-first strategy.
+
+        Args:
+            url: Source URL for downloading data
+
+        Returns:
+            DataFrame loaded from MinIO cache or freshly downloaded
+
+        Raises:
+            DownloadError: If download fails
+            JobExecutionError: If MinIO operations fail
+        """
+        cache_object = f"bronze/nyc_taxi/{self.taxi_type}/cache/{self.file_name}"
+        s3_cache_path = f"s3a://{self.config.minio.bucket}/{cache_object}"
+
+        minio_client = self._get_minio_client()
+
+        # Check if file exists in MinIO cache
+        try:
+            minio_client.stat_object(self.config.minio.bucket, cache_object)
+            self.logger.info(f"Cache hit - loading from MinIO: {s3_cache_path}")
+            return self.spark.read.parquet(s3_cache_path)
+        except S3Error as e:
+            # File doesn't exist in cache - proceed with download
+            self.logger.info(f"Cache miss - will download from NYC TLC")
+
+        # Download to temporary local file
+        self.logger.info(f"Downloading from: {url}")
+        local_temp_path = Path(self.config.cache_dir)
+        local_temp_path.mkdir(parents=True, exist_ok=True)
+        local_file = local_temp_path / self.file_name
+
+        try:
+            self._download_file(url, local_file)
+        except Exception as e:
+            raise DownloadError(f"Failed to download {url}: {e}") from e
+
+        # Upload to MinIO cache
+        try:
+            self.logger.info(f"Uploading to MinIO cache: {s3_cache_path}")
+            minio_client.fput_object(
+                self.config.minio.bucket,
+                cache_object,
+                str(local_file),
+                content_type="application/octet-stream"
+            )
+            self.logger.info(f"Successfully cached in MinIO: {cache_object}")
+        except S3Error as e:
+            self.logger.warning(f"Failed to upload to MinIO cache: {e}")
+            # Non-critical - continue with local file
+
+        # Read from MinIO cache (if upload succeeded) or local file
+        try:
+            # Try MinIO first
+            minio_client.stat_object(self.config.minio.bucket, cache_object)
+            self.logger.info(f"Reading from MinIO: {s3_cache_path}")
+            df = self.spark.read.parquet(s3_cache_path)
+        except S3Error:
+            # Fall back to local file
+            self.logger.info(f"Reading from local file: {local_file}")
+            df = self.spark.read.parquet(str(local_file))
+
+        # Clean up local temp file
+        try:
+            local_file.unlink()
+            self.logger.info(f"Cleaned up temporary file: {local_file}")
+        except Exception as e:
+            self.logger.warning(f"Failed to delete temporary file {local_file}: {e}")
+
+        return df
+
+    def _extract_with_local_cache(self, url: str) -> DataFrame:
+        """
+        Extract data using local file cache.
+
+        Args:
+            url: Source URL for downloading data
+
+        Returns:
+            DataFrame loaded from local cache or freshly downloaded
+
+        Raises:
+            DownloadError: If download fails
+            JobExecutionError: If file cannot be read
+        """
         cache_path = Path(self.config.cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)
         local_file = cache_path / self.file_name
 
         if not local_file.exists():
-            self.logger.info(f"Downloading from NYC TLC: {url}")
+            self.logger.info(f"Local cache miss - downloading from: {url}")
+            try:
+                self._download_file(url, local_file)
+            except Exception as e:
+                raise DownloadError(f"Failed to download {url}: {e}") from e
+        else:
+            self.logger.info(f"Cache hit - using local file: {local_file}")
 
-            response = requests.get(url, stream=True)
+        try:
+            return self.spark.read.parquet(str(local_file))
+        except Exception as e:
+            raise JobExecutionError(f"Failed to read parquet file {local_file}: {e}") from e
+
+    def _download_file(self, url: str, destination: Path) -> None:
+        """
+        Download file from URL to destination path.
+
+        Args:
+            url: Source URL to download from
+            destination: Local path to save file
+
+        Raises:
+            DownloadError: If download fails or HTTP error occurs
+        """
+        try:
+            response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
 
-            # Download parquet file
-            with open(local_file, 'wb') as f:
+            file_size = int(response.headers.get('content-length', 0))
+            self.logger.info(f"Downloading {file_size:,} bytes from {url}")
+
+            downloaded = 0
+            with open(destination, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
 
-            self.logger.info(f"Downloaded to {local_file}")
-        else:
-            self.logger.info(f"Using cached file: {local_file}")
+            self.logger.info(f"Downloaded {downloaded:,} bytes to {destination}")
 
-        return self.spark.read.parquet(str(local_file))
+        except requests.exceptions.Timeout as e:
+            raise DownloadError(f"Download timeout after 300s: {url}") from e
+        except requests.exceptions.HTTPError as e:
+            raise DownloadError(f"HTTP error {e.response.status_code}: {url}") from e
+        except requests.exceptions.RequestException as e:
+            raise DownloadError(f"Download failed: {e}") from e
+        except IOError as e:
+            raise DownloadError(f"Failed to write file {destination}: {e}") from e
 
     def transform(self, df: DataFrame) -> DataFrame:
         """
@@ -117,7 +406,7 @@ class TaxiIngestionJob(BaseSparkJob):
         self.logger.info(f"Processing {record_count:,} records before validation")
         self.logger.info(f"Schema: {df.schema}")
 
-        # STEP 1: Schema enforcement - ensure critical columns have correct types
+        # Schema enforcement - ensure critical columns have correct types
         # Identify the pickup datetime column (varies by taxi type)
         pickup_col = None
         if "tpep_pickup_datetime" in df.columns:
@@ -132,7 +421,7 @@ class TaxiIngestionJob(BaseSparkJob):
             self.logger.warning(f"Converting {pickup_col} to timestamp type")
             df = df.withColumn(pickup_col, F.col(pickup_col).cast(TimestampType()))
 
-        # STEP 2: Data quality validation - extract year/month for filtering
+        # Data quality validation - extract year/month for filtering
         df = df.withColumn("pickup_year", F.year(F.col(pickup_col))) \
                .withColumn("pickup_month", F.month(F.col(pickup_col)))
 
@@ -159,13 +448,13 @@ class TaxiIngestionJob(BaseSparkJob):
         match_percentage = (filtered_count / record_count) * 100 if record_count > 0 else 0
         self.logger.info(f"Match percentage: {match_percentage:.1f}%")
 
-        if match_percentage < 50:
+        if match_percentage < self.MIN_MATCH_PERCENTAGE:
             self.logger.warning(
                 f"Low match percentage ({match_percentage:.1f}%). "
-                f"Expected more records for {self.year}-{self.month:02d}"
+                f"Expected >{self.MIN_MATCH_PERCENTAGE}% for {self.year}-{self.month:02d}"
             )
 
-        # STEP 3: Add metadata columns ONLY (no business logic transformations)
+        # Add metadata columns ONLY (no business logic transformations)
         # These metadata columns enable:
         # - Data lineage tracking (source_file, ingestion_timestamp)
         # - CDC operations (record_hash, ingestion_date)
@@ -232,14 +521,10 @@ def run_ingestion(
 ) -> bool:
     """
     Convenience function to run the ingestion job for a single month.
-
-    Args:
-        taxi_type: Type of taxi (yellow or green)
-        year: Year of the data
-        month: Month of the data
-
-    Returns:
-        True if successful, False otherwise
+    :param taxi_type: Type of taxi (yellow or green)
+    :param year: Year of the data
+    :param month: Month of the data
+    :returns bool: True if successful, False otherwise
     """
     job = TaxiIngestionJob(taxi_type, year, month)
     return job.run()
@@ -254,16 +539,12 @@ def run_bulk_ingestion(
 ) -> dict:
     """
     Run ingestion for multiple months (historical data ingestion).
-
-    Args:
-        taxi_type: Type of taxi (yellow or green)
-        start_year: Starting year
-        start_month: Starting month (1-12)
-        end_year: Ending year
-        end_month: Ending month (1-12)
-
-    Returns:
-        Dictionary with results for each month
+    :param taxi_type: Type of taxi (yellow or green)
+    :param start_year: Starting year
+    :param start_month: Starting month (1-12)
+    :param end_year: Ending year
+    :param end_month: Ending month (1-12)
+    :returns dict: Dictionary with results for each month
     """
     from datetime import date
     from dateutil.relativedelta import relativedelta
