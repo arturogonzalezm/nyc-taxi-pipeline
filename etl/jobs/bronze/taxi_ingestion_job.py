@@ -1,15 +1,15 @@
 """
 NYC Taxi Data Ingestion Job - Bronze Layer ETL.
 
-This module implements the ingestion pipeline for NYC Taxi trip data, downloading
+This module implements the bronze pipeline for NYC Taxi trip data, downloading
 monthly parquet files from NYC TLC and storing them in the MinIO bronze layer with
 appropriate partitioning for Delta Lake and CDC operations.
 
 Architecture:
     - Follows Medallion Architecture (Bronze/Silver/Gold layers)
-    - Bronze layer: Raw data with minimal transformation, metadata added
+    - Bronze layer: Raw data with minimal gold, metadata added
     - Implements caching strategy: MinIO cache with local fallback
-    - Supports both single-month and bulk historical ingestion
+    - Supports both single-month and bulk historical bronze
 
 Data Quality:
     - Validates data matches requested year/month
@@ -40,23 +40,28 @@ from minio.error import S3Error
 from ..base_job import BaseSparkJob, JobExecutionError
 from ..utils.config import JobConfig
 
-
 logger = logging.getLogger(__name__)
 
 
 class DataValidationError(JobExecutionError):
-    """Raised when data validation fails during ingestion"""
+    """
+    Raised when data validation fails during bronze
+    :raises DataValidationError: If data does not match requested year/month or fails schema validation
+    """
     pass
 
 
 class DownloadError(JobExecutionError):
-    """Raised when data download from NYC TLC fails"""
+    """
+    Raised when data download from NYC TLC fails
+    :raises DownloadError: If download fails or HTTP error occurs
+    """
     pass
 
 
 class TaxiIngestionJob(BaseSparkJob):
     """
-    Production-ready ingestion job for NYC Taxi trip data.
+    Production-ready bronze job for NYC Taxi trip data.
 
     This job downloads monthly taxi trip data from NYC TLC, validates it, adds
     metadata columns for lineage tracking, and loads it to the MinIO bronze layer
@@ -77,11 +82,11 @@ class TaxiIngestionJob(BaseSparkJob):
         3. Load: Write to MinIO bronze layer with partitioning
 
     Example:
-        >>> # Single month ingestion
+        >>> # Single month bronze
         >>> job = TaxiIngestionJob("yellow", 2024, 1)
         >>> success = job.run()
         >>>
-        >>> # Bulk historical ingestion
+        >>> # Bulk historical bronze
         >>> results = run_bulk_ingestion("yellow", 2024, 1, 2024, 12)
 
     Attributes:
@@ -95,26 +100,21 @@ class TaxiIngestionJob(BaseSparkJob):
     NYC_TLC_BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
     VALID_TAXI_TYPES = ["yellow", "green"]
     MIN_YEAR = 2009  # NYC TLC data starts from 2009
-    MIN_MATCH_PERCENTAGE = 50.0  # Warn if less than 50% of records match requested period
 
     def __init__(
-        self,
-        taxi_type: Literal["yellow", "green"],
-        year: int,
-        month: int,
-        config: Optional[JobConfig] = None
+            self,
+            taxi_type: Literal["yellow", "green"],
+            year: int,
+            month: int,
+            config: Optional[JobConfig] = None
     ):
         """
-        Initialize the taxi data ingestion job.
-
-        Args:
-            taxi_type: Type of taxi data to ingest (yellow or green)
-            year: Year of the data (2009 or later)
-            month: Month of the data (1-12)
-            config: Optional job configuration (uses default singleton if not provided)
-
-        Raises:
-            ValueError: If taxi_type, year, or month are invalid
+        Initialise the taxi data bronze job.
+        :params taxi_type: Type of taxi data to ingest (yellow or green)
+        :params year: Year of the data (2009 or later)
+        :params month: Month of the data (1-12)
+        :params config: Optional job configuration (uses default singleton if not provided)
+        :raises ValueError: If taxi_type, year, or month are invalid
         """
         # Validate parameters before calling super().__init__
         self._validate_parameters(taxi_type, year, month)
@@ -130,20 +130,16 @@ class TaxiIngestionJob(BaseSparkJob):
 
     @staticmethod
     def _validate_parameters(
-        taxi_type: str,
-        year: int,
-        month: int
+            taxi_type: str,
+            year: int,
+            month: int
     ) -> None:
         """
         Validate job parameters before initialization.
-
-        Args:
-            taxi_type: Type of taxi (yellow or green)
-            year: Year of data
-            month: Month of data
-
-        Raises:
-            ValueError: If any parameter is invalid
+        :params taxi_type: Type of taxi (yellow or green)
+        :params year: Year of data
+        :params month: Month of data
+        :raises ValueError: If any parameter is invalid
         """
         if taxi_type not in TaxiIngestionJob.VALID_TAXI_TYPES:
             raise ValueError(
@@ -178,7 +174,7 @@ class TaxiIngestionJob(BaseSparkJob):
     def extract(self) -> DataFrame:
         """
         Extract data from source.
-        For ingestion job, always download from NYC TLC to get fresh data.
+        For bronze job, always download from NYC TLC to get fresh data.
         """
         return self._extract_from_source()
 
@@ -202,12 +198,9 @@ class TaxiIngestionJob(BaseSparkJob):
             3. Upload to MinIO cache for future use
             4. Fallback to local cache if MinIO fails
 
-        Returns:
-            DataFrame containing raw trip data from source
-
-        Raises:
-            DownloadError: If download from NYC TLC fails
-            JobExecutionError: If data cannot be loaded
+        :returns: DataFrame containing raw trip data from source
+        :raises DownloadError: If download from NYC TLC fails
+        :raises JobExecutionError: If data cannot be loaded
         """
         # NYC TLC provides monthly parquet files via their CDN
         url = f"{self.NYC_TLC_BASE_URL}/{self.file_name}"
@@ -226,12 +219,8 @@ class TaxiIngestionJob(BaseSparkJob):
     def _get_minio_client(self) -> Minio:
         """
         Create and return configured MinIO client.
-
-        Returns:
-            Initialized Minio client
-
-        Raises:
-            JobExecutionError: If MinIO client creation fails
+        :returns: Initialised Minio client
+        :raises JobExecutionError: If MinIO client creation fails
         """
         try:
             endpoint = self.config.minio.endpoint.replace("http://", "").replace("https://", "")
@@ -248,16 +237,10 @@ class TaxiIngestionJob(BaseSparkJob):
     def _extract_with_minio_cache(self, url: str) -> DataFrame:
         """
         Extract data using MinIO cache-first strategy.
-
-        Args:
-            url: Source URL for downloading data
-
-        Returns:
-            DataFrame loaded from MinIO cache or freshly downloaded
-
-        Raises:
-            DownloadError: If download fails
-            JobExecutionError: If MinIO operations fail
+        :params url: Source URL for downloading data
+        :returns DataFrame loaded from MinIO cache or freshly downloaded
+        :raises DownloadError: If download fails
+        :raises JobExecutionError: If MinIO operations fail
         """
         cache_object = f"bronze/nyc_taxi/{self.taxi_type}/cache/{self.file_name}"
         s3_cache_path = f"s3a://{self.config.minio.bucket}/{cache_object}"
@@ -321,16 +304,10 @@ class TaxiIngestionJob(BaseSparkJob):
     def _extract_with_local_cache(self, url: str) -> DataFrame:
         """
         Extract data using local file cache.
-
-        Args:
-            url: Source URL for downloading data
-
-        Returns:
-            DataFrame loaded from local cache or freshly downloaded
-
-        Raises:
-            DownloadError: If download fails
-            JobExecutionError: If file cannot be read
+        :params url: Source URL for downloading data
+        :returns: DataFrame loaded from local cache or freshly downloaded
+        :raises DownloadError: If download fails
+        :raises JobExecutionError: If file cannot be read
         """
         cache_path = Path(self.config.cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)
@@ -353,13 +330,9 @@ class TaxiIngestionJob(BaseSparkJob):
     def _download_file(self, url: str, destination: Path) -> None:
         """
         Download file from URL to destination path.
-
-        Args:
-            url: Source URL to download from
-            destination: Local path to save file
-
-        Raises:
-            DownloadError: If download fails or HTTP error occurs
+        :params url: Source URL to download from
+        :params destination: Local path to save file
+        :raises DownloadError: If download fails or HTTP error occurs
         """
         try:
             response = requests.get(url, stream=True, timeout=300)
@@ -392,85 +365,27 @@ class TaxiIngestionJob(BaseSparkJob):
 
         Bronze Layer Transformations:
         1. Preserve raw data - no business logic transformations
-        2. Schema enforcement - validate and enforce data types
-        3. Add metadata columns for lineage and CDC tracking
-        4. Data quality validation - filter to requested year/month
+        2. Add metadata columns for lineage tracking
 
         This ensures we maintain the raw, unaltered source data while adding
         necessary metadata for downstream processing and auditing.
         """
         from pyspark.sql import functions as F
-        from pyspark.sql.types import TimestampType, DoubleType, IntegerType
 
         record_count = df.count()
-        self.logger.info(f"Processing {record_count:,} records before validation")
+        self.logger.info(f"Processing {record_count:,} records")
         self.logger.info(f"Schema: {df.schema}")
 
-        # Schema enforcement - ensure critical columns have correct types
-        # Identify the pickup datetime column (varies by taxi type)
-        pickup_col = None
-        if "tpep_pickup_datetime" in df.columns:
-            pickup_col = "tpep_pickup_datetime"
-        elif "lpep_pickup_datetime" in df.columns:
-            pickup_col = "lpep_pickup_datetime"
-        else:
-            raise ValueError("No pickup datetime column found in data")
-
-        # Enforce datetime type on pickup column if not already
-        if df.schema[pickup_col].dataType != TimestampType():
-            self.logger.warning(f"Converting {pickup_col} to timestamp type")
-            df = df.withColumn(pickup_col, F.col(pickup_col).cast(TimestampType()))
-
-        # Data quality validation - extract year/month for filtering
-        df = df.withColumn("pickup_year", F.year(F.col(pickup_col))) \
-               .withColumn("pickup_month", F.month(F.col(pickup_col)))
-
-        # Log data distribution before filtering
-        year_month_dist = df.groupBy("pickup_year", "pickup_month").count().collect()
-        self.logger.info(f"Data distribution by year/month: {year_month_dist}")
-
-        # Filter to only include records matching the requested year and month
-        df_filtered = df.filter(
-            (F.col("pickup_year") == self.year) &
-            (F.col("pickup_month") == self.month)
-        )
-
-        filtered_count = df_filtered.count()
-        self.logger.info(f"Filtered to {filtered_count:,} records for {self.year}-{self.month:02d}")
-
-        if filtered_count == 0:
-            raise ValueError(
-                f"No records found for {self.year}-{self.month:02d}. "
-                f"Source file may contain incorrect data."
-            )
-
-        # Validate that we're getting reasonable data
-        match_percentage = (filtered_count / record_count) * 100 if record_count > 0 else 0
-        self.logger.info(f"Match percentage: {match_percentage:.1f}%")
-
-        if match_percentage < self.MIN_MATCH_PERCENTAGE:
-            self.logger.warning(
-                f"Low match percentage ({match_percentage:.1f}%). "
-                f"Expected >{self.MIN_MATCH_PERCENTAGE}% for {self.year}-{self.month:02d}"
-            )
-
         # Add metadata columns ONLY (no business logic transformations)
-        # These metadata columns enable:
-        # - Data lineage tracking (source_file, ingestion_timestamp)
-        # - CDC operations (record_hash, ingestion_date)
-        # - Partitioning (year, month)
-        df_final = df_filtered.withColumn("ingestion_timestamp", F.current_timestamp()) \
-                              .withColumn("ingestion_date", F.current_date()) \
-                              .withColumn("source_file", F.lit(self.file_name)) \
-                              .withColumn("year", F.lit(self.year)) \
-                              .withColumn("month", F.lit(self.month)) \
-                              .withColumn("record_hash", F.hash(*df.columns))  # For CDC change detection
+        # These metadata columns enable data lineage tracking
+        df_final = df.withColumn("ingestion_timestamp", F.current_timestamp()) \
+            .withColumn("ingestion_date", F.current_date()) \
+            .withColumn("source_file", F.lit(self.file_name)) \
+            .withColumn("year", F.lit(self.year)) \
+            .withColumn("month", F.lit(self.month))
 
-        # Drop temporary columns used for validation
-        df_final = df_final.drop("pickup_year", "pickup_month")
-
-        self.logger.info(f"Bronze layer transformation complete: {filtered_count:,} records")
-        self.logger.info("Transformations applied: schema enforcement, metadata addition only")
+        self.logger.info(f"Bronze layer gold complete: {record_count:,} records")
+        self.logger.info("Transformations applied: metadata addition only")
 
         return df_final
 
@@ -515,12 +430,12 @@ class TaxiIngestionJob(BaseSparkJob):
 
 
 def run_ingestion(
-    taxi_type: Literal["yellow", "green"],
-    year: int,
-    month: int
+        taxi_type: Literal["yellow", "green"],
+        year: int,
+        month: int
 ) -> bool:
     """
-    Convenience function to run the ingestion job for a single month.
+    Convenience function to run the bronze job for a single month.
     :param taxi_type: Type of taxi (yellow or green)
     :param year: Year of the data
     :param month: Month of the data
@@ -531,14 +446,14 @@ def run_ingestion(
 
 
 def run_bulk_ingestion(
-    taxi_type: Literal["yellow", "green"],
-    start_year: int,
-    start_month: int,
-    end_year: int,
-    end_month: int
+        taxi_type: Literal["yellow", "green"],
+        start_year: int,
+        start_month: int,
+        end_year: int,
+        end_month: int
 ) -> dict:
     """
-    Run ingestion for multiple months (historical data ingestion).
+    Run bronze for multiple months (historical data bronze).
     :param taxi_type: Type of taxi (yellow or green)
     :param start_year: Starting year
     :param start_month: Starting month (1-12)
@@ -583,7 +498,7 @@ def run_bulk_ingestion(
         # Move to next month
         current_date += relativedelta(months=1)
 
-    logger.info(f"Bulk ingestion complete: {successful}/{total_months} successful, {failed} failed")
+    logger.info(f"Bulk bronze complete: {successful}/{total_months} successful, {failed} failed")
     return results
 
 
@@ -592,22 +507,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="NYC Taxi Data Ingestion Job")
     parser.add_argument("--taxi-type", type=str, choices=["yellow", "green"], required=True)
-    parser.add_argument("--year", type=int, help="Year of the data (for single month ingestion)")
-    parser.add_argument("--month", type=int, help="Month of the data (for single month ingestion)")
-    parser.add_argument("--start-year", type=int, help="Start year (for bulk ingestion)")
-    parser.add_argument("--start-month", type=int, help="Start month (for bulk ingestion)")
-    parser.add_argument("--end-year", type=int, help="End year (for bulk ingestion)")
-    parser.add_argument("--end-month", type=int, help="End month (for bulk ingestion)")
+    parser.add_argument("--year", type=int, help="Year of the data (for single month bronze)")
+    parser.add_argument("--month", type=int, help="Month of the data (for single month bronze)")
+    parser.add_argument("--start-year", type=int, help="Start year (for bulk bronze)")
+    parser.add_argument("--start-month", type=int, help="Start month (for bulk bronze)")
+    parser.add_argument("--end-year", type=int, help="End year (for bulk bronze)")
+    parser.add_argument("--end-month", type=int, help="End month (for bulk bronze)")
 
     args = parser.parse_args()
 
-    # Determine if single or bulk ingestion
+    # Determine if single or bulk bronze
     if args.year and args.month:
-        # Single month ingestion
+        # Single month bronze
         success = run_ingestion(args.taxi_type, args.year, args.month)
         exit(0 if success else 1)
     elif args.start_year and args.start_month and args.end_year and args.end_month:
-        # Bulk ingestion
+        # Bulk bronze
         results = run_bulk_ingestion(
             args.taxi_type,
             args.start_year,
@@ -624,4 +539,5 @@ if __name__ == "__main__":
         failed_count = sum(1 for r in results.values() if r != "SUCCESS")
         exit(0 if failed_count == 0 else 1)
     else:
-        parser.error("Either provide --year and --month for single ingestion, or --start-year, --start-month, --end-year, --end-month for bulk ingestion")
+        parser.error(
+            "Either provide --year and --month for single bronze, or --start-year, --start-month, --end-year, --end-month for bulk bronze")
