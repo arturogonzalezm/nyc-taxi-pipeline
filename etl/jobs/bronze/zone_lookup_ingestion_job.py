@@ -1,7 +1,7 @@
 """
 NYC Taxi Zone Lookup Ingestion Job - Reference Data ETL.
 
-This module implements the ingestion pipeline for NYC Taxi zone lookup reference data.
+This module implements the bronze pipeline for NYC Taxi zone lookup reference data.
 This is a static reference table that maps LocationID to Borough, Zone, and service_zone.
 
 Purpose:
@@ -44,13 +44,15 @@ logger = logging.getLogger(__name__)
 
 
 class ReferenceDataError(JobExecutionError):
-    """Raised when reference data validation fails"""
+    """
+    Raised when reference data validation fails
+    """
     pass
 
 
 class ZoneLookupIngestionJob(BaseSparkJob):
     """
-    Production-ready ingestion job for NYC Taxi zone lookup reference data.
+    Production-ready bronze job for NYC Taxi zone lookup reference data.
 
     This job downloads the taxi zone lookup CSV, validates it, and uploads the
     raw CSV file to MinIO misc directory for use as reference/dimension data.
@@ -86,10 +88,8 @@ class ZoneLookupIngestionJob(BaseSparkJob):
 
     def __init__(self, config: Optional[JobConfig] = None):
         """
-        Initialize the zone lookup ingestion job.
-
-        Args:
-            config: Optional job configuration (uses default singleton if not provided)
+        Initialise the zone lookup bronze job.
+        :params config: Optional job configuration (uses default singleton if not provided)
         """
         super().__init__(
             job_name="ZoneLookupIngestion",
@@ -102,7 +102,7 @@ class ZoneLookupIngestionJob(BaseSparkJob):
         """
         Validate job inputs
         """
-        self.logger.info(f"Validating zone lookup ingestion from {self.source_url}")
+        self.logger.info(f"Validating zone lookup bronze from {self.source_url}")
 
     def extract(self) -> DataFrame:
         """
@@ -114,12 +114,8 @@ class ZoneLookupIngestionJob(BaseSparkJob):
     def _extract_from_source(self) -> DataFrame:
         """
         Download and load zone lookup CSV from NYC TLC.
-
-        Returns:
-            DataFrame containing zone lookup reference data
-
-        Raises:
-            JobExecutionError: If download or file read fails
+        :returns: DataFrame containing zone lookup reference data
+        :raises JobExecutionError: If download or file read fails
         """
         cache_path = Path(self.config.cache_dir)
         cache_path.mkdir(parents=True, exist_ok=True)
@@ -173,11 +169,8 @@ class ZoneLookupIngestionJob(BaseSparkJob):
             - Primary key (LocationID) has no nulls
             - Record count is reasonable (>0)
 
-        Returns:
-            Original DataFrame unmodified (validation only)
-
-        Raises:
-            ReferenceDataError: If validation fails
+        :returns: Original DataFrame unmodified (validation only)
+        :raises ReferenceDataError: If validation fails
         """
         self.logger.info("Validating zone lookup reference data")
         self.logger.info(f"Schema: {df.schema}")
@@ -229,13 +222,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
 
         This method uploads the raw CSV file (not the DataFrame) to MinIO
         to preserve the original format and ensure maximum compatibility.
-
-        Args:
-            df: Validated DataFrame (used for record count only)
-
-        Raises:
-            FileNotFoundError: If local cache file doesn't exist
-            JobExecutionError: If MinIO upload fails
+        :params df: Validated DataFrame (used for record count only)
+        :raises FileNotFoundError: If local cache file doesn't exist
+        :raises JobExecutionError: If MinIO upload fails
         """
         record_count = df.count()
         self.logger.info(f"Validated {record_count:,} zone records, preparing upload")
@@ -287,12 +276,8 @@ class ZoneLookupIngestionJob(BaseSparkJob):
     def _get_minio_client(self) -> Minio:
         """
         Create and return configured MinIO client.
-
-        Returns:
-            Initialized Minio client
-
-        Raises:
-            JobExecutionError: If MinIO client creation fails
+        :returns: Initialised Minio client
+        :raises JobExecutionError: If MinIO client creation fails
         """
         try:
             endpoint = self.config.minio.endpoint
@@ -315,13 +300,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
     def _ensure_bucket_exists(self, minio_client: Minio, bucket_name: str) -> None:
         """
         Ensure MinIO bucket exists, create if it doesn't.
-
-        Args:
-            minio_client: Initialized MinIO client
-            bucket_name: Name of bucket to check/create
-
-        Raises:
-            JobExecutionError: If bucket check or creation fails
+        :params minio_client: Initialized MinIO client
+        :params bucket_name: Name of bucket to check/create
+        :raises JobExecutionError: If bucket check or creation fails
         """
         try:
             if not minio_client.bucket_exists(bucket_name):
@@ -337,7 +318,7 @@ class ZoneLookupIngestionJob(BaseSparkJob):
 
 def run_zone_lookup_ingestion() -> bool:
     """
-    Convenience function to run the zone lookup ingestion job.
+    Convenience function to run the zone lookup bronze job.
     :returns: True if job completed successfully, False otherwise
     """
     job = ZoneLookupIngestionJob()
