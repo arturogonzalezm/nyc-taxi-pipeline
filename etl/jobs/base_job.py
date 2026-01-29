@@ -7,7 +7,7 @@ configurable components.
 
 Design Patterns:
     - Template Method: Defines the skeleton of job execution
-    - Strategy: Allows different extraction, transformation, and loading strategies
+    - Strategy: Allows different extraction, gold, and loading strategies
     - Singleton: Uses singleton SparkSession and configuration
 """
 from abc import ABC, abstractmethod
@@ -23,7 +23,9 @@ from .utils.config import JobConfig
 
 
 class JobExecutionError(Exception):
-    """Custom exception for job execution failures"""
+    """
+    Custom exception for job execution failures
+    """
     pass
 
 
@@ -31,9 +33,9 @@ class BaseSparkJob(ABC):
     """
     Abstract base class for PySpark ETL jobs using Template Method pattern.
 
-    This class provides a standardized framework for ETL jobs with:
+    This class provides a standardised framework for ETL jobs with:
     - Consistent execution flow (validate -> extract -> transform -> load)
-    - Centralized error handling and logging
+    - Centralised error handling and logging
     - Resource management and cleanup
     - Job metrics and monitoring
 
@@ -61,11 +63,9 @@ class BaseSparkJob(ABC):
 
     def __init__(self, job_name: str, config: Optional[JobConfig] = None):
         """
-        Initialize the ETL job.
-
-        Args:
-            job_name: Unique identifier for the job (used for logging and monitoring)
-            config: Job configuration instance (uses singleton default if not provided)
+        Initialise the ETL job.
+        :params job_name: Unique identifier for the job (used for logging and monitoring)
+        :params config: Job configuration instance (uses singleton default if not provided)
 
         Raises:
             ValueError: If job_name is empty or invalid
@@ -83,9 +83,7 @@ class BaseSparkJob(ABC):
     def _setup_logger(self) -> logging.Logger:
         """
         Configure structured logging for the job.
-
-        Returns:
-            Configured logger instance
+        :returns: Configured logger instance
 
         Note:
             - Uses INFO level by default
@@ -111,9 +109,7 @@ class BaseSparkJob(ABC):
     def _track_metrics(self, step: str):
         """
         Context manager for tracking execution metrics per step.
-
-        Args:
-            step: Name of the execution step (e.g., 'extract', 'transform')
+        :params step: Name of the execution step (e.g., 'extract', 'transform')
         """
         step_start = time.time()
         self.logger.info(f"Starting step: {step}")
@@ -129,18 +125,15 @@ class BaseSparkJob(ABC):
         Execute the ETL job following the Template Method pattern.
 
         This method defines the invariant job execution flow:
-        1. Initialize Spark session
+        1. Initialise Spark session
         2. Validate inputs
         3. Extract data
         4. Transform data
         5. Load data
         6. Cleanup resources
 
-        Returns:
-            True if job completed successfully, False otherwise
-
-        Raises:
-            JobExecutionError: If any step fails with context about the failure
+        :returns: True if job completed successfully, False otherwise
+        :raises JobExecutionError: If any step fails with context about the failure
         """
         self._start_time = time.time()
         self._metrics['job_name'] = self.job_name
@@ -152,8 +145,8 @@ class BaseSparkJob(ABC):
             self.logger.info(f"Starting job: {self.job_name}")
             self.logger.info(f"=" * 80)
 
-            # Initialize Spark session
-            with self._track_metrics('initialization'):
+            # Initialise Spark session
+            with self._track_metrics('initialisation'):
                 self.spark = SparkSessionManager.get_session(
                     app_name=self.job_name,
                     enable_s3=self.config.minio.use_minio
@@ -218,9 +211,8 @@ class BaseSparkJob(ABC):
         - Input data sources are accessible
         - Configuration values are valid
 
-        Raises:
-            ValueError: If validation fails
-            JobExecutionError: If critical validation errors occur
+        :raises ValueError: If validation fails
+        :raises JobExecutionError: If critical validation errors occur
         """
         pass
 
@@ -228,12 +220,8 @@ class BaseSparkJob(ABC):
     def extract(self) -> DataFrame:
         """
         Extract data from source systems.
-
-        Returns:
-            DataFrame containing extracted data
-
-        Raises:
-            JobExecutionError: If extraction fails
+        :returns: DataFrame containing extracted data
+        :raises JobExecutionError: If extraction fails
         """
         pass
 
@@ -241,15 +229,9 @@ class BaseSparkJob(ABC):
     def transform(self, df: DataFrame) -> DataFrame:
         """
         Transform the extracted data.
-
-        Args:
-            df: Input DataFrame from extract step
-
-        Returns:
-            Transformed DataFrame
-
-        Raises:
-            JobExecutionError: If transformation fails
+        :params df: Input DataFrame from extract step
+        :returns: Transformed DataFrame
+        :raises JobExecutionError: If gold fails
         """
         pass
 
@@ -257,12 +239,8 @@ class BaseSparkJob(ABC):
     def load(self, df: DataFrame) -> None:
         """
         Load transformed data to destination.
-
-        Args:
-            df: Transformed DataFrame from transform step
-
-        Raises:
-            JobExecutionError: If load fails
+        :params df: Transformed DataFrame from transform step
+        :raises JobExecutionError: If load fails
         """
         pass
 
@@ -287,8 +265,6 @@ class BaseSparkJob(ABC):
     def get_metrics(self) -> Dict[str, Any]:
         """
         Get job execution metrics.
-
-        Returns:
-            Dictionary containing job metrics (durations, status, etc.)
+        :returns: Dictionary containing job metrics (durations, status, etc.)
         """
         return self._metrics.copy()
