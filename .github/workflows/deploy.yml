@@ -1,0 +1,95 @@
+name: Deploy to GCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+jobs:
+  deploy:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
+        run: |
+          cd terraform
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan
+
+      - name: Upload DAGs to Composer
+        if: github.event.inputs.action == 'apply'
+        run: |
+          COMPOSER_BUCKET=$(cd terraform && terraform output -raw composer_dag_bucket)
+          gsutil -m cp airflow/dags/*.py gs://$COMPOSER_BUCKET/dags/
+
+      - name: Upload PySpark jobs to GCS
+        if: github.event.inputs.action == 'apply'
+        run: |
+          BRONZE_BUCKET=$(cd terraform && terraform output -raw bronze_bucket)
+          gsutil -m cp -r pyspark/ gs://$BRONZE_BUCKET/
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy'
+        run: |
+          cd terraform
+          terraform destroy \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -auto-approve
+
+      - name: Post deployment summary
+        if: github.event.inputs.action == 'apply'
+        run: |
+          echo "### Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Action:** ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Resources Created:" >> $GITHUB_STEP_SUMMARY
+          cd terraform && terraform output >> $GITHUB_STEP_SUMMARY

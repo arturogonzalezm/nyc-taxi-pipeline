@@ -1,0 +1,8 @@
+# PySpark Job Requirements
+# Last updated: 2026-01-28
+
+pyspark==4.1.1
+google-cloud-storage==3.8.0
+google-cloud-bigquery==3.40.0
+psycopg2-binary==2.9.11
+py4j==0.10.9.7
