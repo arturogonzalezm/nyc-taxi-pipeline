@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <!-- Override all S3A timeout properties that use "60s" format in Hadoop 3.4+ -->
+    <property>
+        <name>fs.s3a.connection.timeout</name>
+        <value>60000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.establish.timeout</name>
+        <value>60000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.acquisition.timeout</name>
+        <value>60000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.request.timeout</name>
+        <value>60000</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.idle.time</name>
+        <value>60000</value>
+    </property>
+    <property>
+        <name>fs.s3a.attempts.maximum</name>
+        <value>3</value>
+    </property>
+    <property>
+        <name>fs.s3a.retry.interval</name>
+        <value>500</value>
+    </property>
+    <property>
+        <name>fs.s3a.retry.limit</name>
+        <value>3</value>
+    </property>
+</configuration>

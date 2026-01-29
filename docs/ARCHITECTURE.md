@@ -80,15 +80,14 @@ This document provides a detailed technical architecture for the NYC Taxi Data P
 ### Core Technologies
 
 - **PySpark 3.5.0**: Distributed data processing
-- **Apache Airflow 2.7.3**: Workflow orchestration
 - **PostgreSQL 15**: Local data warehouse
 - **Docker Compose**: Local development environment
+- **MinIO**: Local object storage (S3-compatible)
 
 ### GCP Services
 
 - **Cloud Storage**: Data lake (bronze/silver/gold)
 - **BigQuery**: Data warehouse
-- **Cloud Composer**: Managed Airflow
 - **Dataproc**: Managed Spark clusters
 - **VPC**: Private networking
 - **IAM**: Service accounts and permissions
@@ -127,14 +126,12 @@ This document provides a detailed technical architecture for the NYC Taxi Data P
 
 - Docker Compose orchestrates all services
 - PostgreSQL simulates BigQuery
-- Local filesystem replaces GCS
-- Airflow runs in containers
+- MinIO provides S3-compatible storage
 - No GCP costs
 
 ### GCP Mode
 
 - Terraform provisions infrastructure
-- Cloud Composer orchestrates workflows
 - Dataproc runs Spark jobs
 - BigQuery stores warehouse
 - VPC provides network isolation
@@ -162,7 +159,6 @@ This document provides a detailed technical architecture for the NYC Taxi Data P
 - Private VPC with custom subnets
 - Cloud NAT for outbound internet
 - Firewall rules (deny all ingress)
-- Private IP for Composer
 
 ### Access Control
 
@@ -188,7 +184,6 @@ This document provides a detailed technical architecture for the NYC Taxi Data P
 
 ### Logging
 
-- Airflow task logs
 - Spark application logs
 - System logs (Cloud Logging)
 
@@ -219,7 +214,6 @@ This document provides a detailed technical architecture for the NYC Taxi Data P
 ### Horizontal Scaling
 
 - Dataproc: Add worker nodes
-- Composer: Increase worker count
 - BigQuery: Automatic scaling
 
 ### Data Volume

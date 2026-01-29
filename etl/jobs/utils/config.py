@@ -14,16 +14,16 @@ class MinIOConfig:
     access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     secret_key: str = os.getenv("MINIO_SECRET_KEY", "minioadmin")
     bucket: str = "nyc-taxi-pipeline"
-    bronze_path: str = "bronze/trip-data"
-    silver_path: str = "silver/trip-data"
-    gold_path: str = "gold/trip-data"
+    bronze_path: str = "bronze/nyc_taxi"
+    silver_path: str = "silver/nyc_taxi"
+    gold_path: str = "gold/nyc_taxi"
     use_minio: bool = os.getenv("USE_MINIO", "true").lower() == "true"
 
 
 @dataclass
 class DataSourceConfig:
     """External data source configuration"""
-    cloudfront_url: str = "https://d37ci6vzurychx.cloudfront.net/trip-data"
+    base_url: str = "https://d37ci6vzurychx.cloudfront.net/trip-data"
 
 
 @dataclass
@@ -38,17 +38,25 @@ class JobConfig:
     def get_s3_path(
         self,
         layer: Literal["bronze", "silver", "gold"],
-        file_name: str
+        taxi_type: str = None,
+        file_name: str = None
     ) -> str:
         """
-        Get S3 path for given layer and file name.
+        Get S3 path for given layer and taxi type.
 
         Args:
             layer: Data lake layer (bronze, silver, gold)
-            file_name: Name of the file
+            taxi_type: Type of taxi (yellow, green) - optional
+            file_name: Name of the file - optional (deprecated, kept for backward compatibility)
 
         Returns:
             Full S3 path
         """
         layer_path = getattr(self.minio, f"{layer}_path")
-        return f"s3a://{self.minio.bucket}/{layer_path}/{file_name}"
+        if taxi_type:
+            return f"s3a://{self.minio.bucket}/{layer_path}/{taxi_type}"
+        elif file_name:
+            # Backward compatibility
+            return f"s3a://{self.minio.bucket}/{layer_path}/{file_name}"
+        else:
+            return f"s3a://{self.minio.bucket}/{layer_path}"

@@ -62,12 +62,6 @@ jobs:
           cd terraform
           terraform apply -auto-approve tfplan
 
-      - name: Upload DAGs to Composer
-        if: github.event.inputs.action == 'apply'
-        run: |
-          COMPOSER_BUCKET=$(cd terraform && terraform output -raw composer_dag_bucket)
-          gsutil -m cp airflow/dags/*.py gs://$COMPOSER_BUCKET/dags/
-
       - name: Upload PySpark jobs to GCS
         if: github.event.inputs.action == 'apply'
         run: |

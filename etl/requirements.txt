@@ -6,3 +6,4 @@ google-cloud-storage==3.8.0
 google-cloud-bigquery==3.40.0
 psycopg2-binary==2.9.11
 py4j==0.10.9.7
+minio==7.2.20

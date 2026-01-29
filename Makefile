@@ -1,4 +1,4 @@
-.PHONY: up down logs nuke init airflow-password help
+.PHONY: up down logs nuke init help
 
 # Colors for terminal output
 GREEN := \033[0;32m
@@ -8,12 +8,10 @@ NC := \033[0m
 
 init:
 	@echo "$(CYAN)Initializing project...$(NC)"
-	@mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./data/cache
+	@mkdir -p ./data/cache
 	@if [ ! -f .env ]; then \
 		echo "$(YELLOW)Creating .env file from .env.example...$(NC)"; \
 		cp .env.example .env; \
-		echo "AIRFLOW_UID=$$(id -u)" >> .env; \
-		echo "AIRFLOW_GID=0" >> .env; \
 		echo "$(GREEN).env file created!$(NC)"; \
 		echo "$(YELLOW)Please review and update credentials in .env file$(NC)"; \
 	else \
@@ -28,13 +26,8 @@ up: init
 	@echo "$(GREEN)Services started successfully!$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Service URLs:$(NC)"
-	@echo "  Airflow UI:     http://localhost:8080"
 	@echo "  MinIO API:      http://localhost:9000"
 	@echo "  MinIO Console:  http://localhost:9001"
-	@echo ""
-	@echo "$(YELLOW)Airflow Credentials:$(NC)"
-	@echo "  Username: admin"
-	@echo "  Password: admin"
 	@echo ""
 	@echo "$(YELLOW)MinIO Credentials:$(NC)"
 	@echo "  Username: $$(grep MINIO_ROOT_USER .env | cut -d '=' -f2)"
@@ -54,11 +47,6 @@ down:
 logs:
 	@docker-compose logs -f
 
-airflow-password:
-	@echo "$(CYAN)Airflow Credentials:$(NC)"
-	@echo "  Username: admin"
-	@echo "  Password: admin"
-
 nuke:
 	@echo "$(YELLOW)WARNING: This will remove all containers, images, and volumes!$(NC)"
 	@echo "$(YELLOW)Press Ctrl+C within 5 seconds to cancel...$(NC)"
@@ -76,10 +64,9 @@ nuke:
 help:
 	@echo "$(CYAN)NYC Taxi Pipeline - Available Make commands:$(NC)"
 	@echo ""
-	@echo "  $(GREEN)make init$(NC)              - Initialize Airflow directories and environment"
-	@echo "  $(GREEN)make up$(NC)                - Start all services (Airflow, MinIO, Postgres)"
+	@echo "  $(GREEN)make init$(NC)              - Initialize directories and environment"
+	@echo "  $(GREEN)make up$(NC)                - Start all services (MinIO)"
 	@echo "  $(GREEN)make down$(NC)              - Stop all services"
 	@echo "  $(GREEN)make logs$(NC)              - Show service logs"
-	@echo "  $(GREEN)make airflow-password$(NC)  - Display Airflow admin password"
 	@echo "  $(GREEN)make nuke$(NC)              - Remove all containers, images, and volumes"
 	@echo "  $(GREEN)make help$(NC)              - Show this help message"
