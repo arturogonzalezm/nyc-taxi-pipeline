@@ -1,4 +1,4 @@
-.PHONY: up down logs nuke init help
+.PHONY: up down logs nuke init help postgres-start postgres-stop postgres-create-tables postgres-shell postgres-status
 
 # Colors for terminal output
 GREEN := \033[0;32m
@@ -48,25 +48,104 @@ logs:
 	@docker-compose logs -f
 
 nuke:
-	@echo "$(YELLOW)WARNING: This will remove all containers, images, and volumes!$(NC)"
+	@echo "$(YELLOW)WARNING: This will remove ALL containers, images, volumes, and data!$(NC)"
+	@echo "$(YELLOW)This includes:$(NC)"
+	@echo "  - All Docker containers"
+	@echo "  - All Docker images (MinIO, PostgreSQL, etc.)"
+	@echo "  - All Docker volumes (MinIO data, PostgreSQL data)"
+	@echo "  - All Docker networks"
+	@echo "  - All build cache"
+	@echo ""
 	@echo "$(YELLOW)Press Ctrl+C within 5 seconds to cancel...$(NC)"
 	@sleep 5
 	@echo ""
-	@echo "$(CYAN)Stopping and removing all containers...$(NC)"
-	@docker-compose down -v
-	@echo "$(CYAN)Removing Docker images...$(NC)"
-	@docker rmi minio/minio:latest minio/mc:latest 2>/dev/null || true
-	@echo "$(CYAN)Pruning Docker system...$(NC)"
+	@echo "$(CYAN)Stopping and removing all containers and volumes...$(NC)"
+	@docker-compose down -v --remove-orphans
+	@echo ""
+	@echo "$(CYAN)Removing project Docker images...$(NC)"
+	@docker rmi minio/minio:latest minio/mc:latest postgres:15-alpine 2>/dev/null || true
+	@echo ""
+	@echo "$(CYAN)Removing dangling images...$(NC)"
+	@docker image prune -af
+	@echo ""
+	@echo "$(CYAN)Removing all unused volumes...$(NC)"
+	@docker volume prune -af
+	@echo ""
+	@echo "$(CYAN)Removing all unused networks...$(NC)"
+	@docker network prune -f
+	@echo ""
+	@echo "$(CYAN)Removing build cache...$(NC)"
+	@docker builder prune -af
+	@echo ""
+	@echo "$(CYAN)Final system cleanup...$(NC)"
 	@docker system prune -af --volumes
 	@echo ""
-	@echo "$(GREEN)Cleanup complete!$(NC)"
+	@echo "$(GREEN)Complete cleanup finished!$(NC)"
+	@echo ""
+	@echo "$(CYAN)Docker system status:$(NC)"
+	@docker system df
+
+postgres-start: init
+	@echo "$(CYAN)Starting PostgreSQL...$(NC)"
+	@docker-compose up -d postgres
+	@echo ""
+	@echo "$(GREEN)PostgreSQL started!$(NC)"
+	@echo "$(YELLOW)Connection details:$(NC)"
+	@echo "  Host:     localhost"
+	@echo "  Port:     5432"
+	@echo "  Database: $$(grep POSTGRES_DB .env | cut -d '=' -f2)"
+	@echo "  User:     $$(grep POSTGRES_USER .env | cut -d '=' -f2)"
+	@echo ""
+	@echo "$(CYAN)Waiting for PostgreSQL to be ready...$(NC)"
+	@sleep 3
+	@docker-compose exec postgres pg_isready -U postgres || echo "$(YELLOW)PostgreSQL is starting up...$(NC)"
+
+postgres-stop:
+	@echo "$(CYAN)Stopping PostgreSQL...$(NC)"
+	@docker-compose stop postgres
+	@echo "$(GREEN)PostgreSQL stopped$(NC)"
+
+postgres-create-tables: postgres-start
+	@echo "$(CYAN)Creating PostgreSQL tables...$(NC)"
+	@docker-compose exec postgres psql -U postgres -d nyc_taxi -f /docker-entrypoint-initdb.d/create_dimensional_model.sql
+	@echo "$(GREEN)Tables created successfully!$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Tables created:$(NC)"
+	@docker-compose exec postgres psql -U postgres -d nyc_taxi -c "\dt taxi.*"
+
+postgres-shell:
+	@echo "$(CYAN)Connecting to PostgreSQL...$(NC)"
+	@docker-compose exec postgres psql -U postgres -d nyc_taxi
+
+postgres-status:
+	@echo "$(CYAN)PostgreSQL Status:$(NC)"
+	@docker-compose exec postgres pg_isready -U postgres && echo "$(GREEN)✓ PostgreSQL is ready$(NC)" || echo "$(YELLOW)✗ PostgreSQL is not ready$(NC)"
+	@echo ""
+	@echo "$(CYAN)Database Info:$(NC)"
+	@docker-compose exec postgres psql -U postgres -d nyc_taxi -c "SELECT version();" 2>/dev/null || echo "$(YELLOW)Cannot connect to PostgreSQL$(NC)"
+	@echo ""
+	@echo "$(CYAN)Table Counts:$(NC)"
+	@docker-compose exec postgres psql -U postgres -d nyc_taxi -c "\
+		SELECT 'dim_date' as table_name, COUNT(*) as records FROM taxi.dim_date \
+		UNION ALL SELECT 'dim_location', COUNT(*) FROM taxi.dim_location \
+		UNION ALL SELECT 'dim_payment', COUNT(*) FROM taxi.dim_payment \
+		UNION ALL SELECT 'fact_trip', COUNT(*) FROM taxi.fact_trip;" 2>/dev/null || echo "$(YELLOW)Tables not yet created$(NC)"
 
 help:
 	@echo "$(CYAN)NYC Taxi Pipeline - Available Make commands:$(NC)"
 	@echo ""
-	@echo "  $(GREEN)make init$(NC)              - Initialize directories and environment"
-	@echo "  $(GREEN)make up$(NC)                - Start all services (MinIO)"
-	@echo "  $(GREEN)make down$(NC)              - Stop all services"
-	@echo "  $(GREEN)make logs$(NC)              - Show service logs"
-	@echo "  $(GREEN)make nuke$(NC)              - Remove all containers, images, and volumes"
-	@echo "  $(GREEN)make help$(NC)              - Show this help message"
+	@echo "$(YELLOW)General:$(NC)"
+	@echo "  $(GREEN)make init$(NC)                     - Initialize directories and environment"
+	@echo "  $(GREEN)make up$(NC)                       - Start all services (MinIO + PostgreSQL)"
+	@echo "  $(GREEN)make down$(NC)                     - Stop all services"
+	@echo "  $(GREEN)make logs$(NC)                     - Show service logs"
+	@echo "  $(GREEN)make nuke$(NC)                     - Remove all containers, images, and volumes"
+	@echo ""
+	@echo "$(YELLOW)PostgreSQL:$(NC)"
+	@echo "  $(GREEN)make postgres-start$(NC)           - Start PostgreSQL container"
+	@echo "  $(GREEN)make postgres-stop$(NC)            - Stop PostgreSQL container"
+	@echo "  $(GREEN)make postgres-create-tables$(NC)   - Create dimensional model tables"
+	@echo "  $(GREEN)make postgres-shell$(NC)           - Connect to PostgreSQL shell"
+	@echo "  $(GREEN)make postgres-status$(NC)          - Show PostgreSQL status and table counts"
+	@echo ""
+	@echo "  $(GREEN)make help$(NC)                     - Show this help message"

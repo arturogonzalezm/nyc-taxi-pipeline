@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -46,7 +46,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -102,7 +102,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -112,13 +112,13 @@ jobs:
         run: |
           mkdir -p data/bronze data/silver data/gold
 
-      - name: Run bronze ingestion (test mode)
+      - name: Run bronze bronze (test mode)
         run: |
           echo "Bronze ingestion test would run here"
           # Commented out to avoid actual downloads in CI
           # python pyspark/jobs/bronze_ingestion.py --months 2023-01 --mode local
 
-      - name: Run gold transformation (test mode)
+      - name: Run gold gold (test mode)
         run: |
           echo "Gold transformation test would run here"
           # python pyspark/jobs/gold_transformation.py --months 2023-01 --mode local

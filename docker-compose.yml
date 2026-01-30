@@ -35,6 +35,26 @@ services:
       exit 0;
       "
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: nyc-taxi-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-nyc_taxi}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-nyc_taxi}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   minio_data:
+    driver: local
+  postgres_data:
     driver: local
