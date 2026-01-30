@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "nyc-taxi-pipeline"
 version = "0.1.0"
 description = "NYC Taxi Data Pipeline"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     # PySpark and distributed computing
     "pyspark==4.1.1",
