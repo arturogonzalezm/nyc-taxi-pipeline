@@ -345,19 +345,21 @@ Additional documentation is available in the `docs/` directory:
 
 ## Environment Variables
 
-Configure via `.env` file (created from `.env.example` by `make init`):
+Configure via environment variables or a secrets manager. Required variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MINIO_ENDPOINT` | `localhost:9000` | MinIO server endpoint |
-| `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
-| `MINIO_SECRET_KEY` | `minioadmin` | MinIO secret key |
-| `MINIO_BUCKET` | `nyc-taxi-pipeline` | MinIO bucket name |
-| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
-| `POSTGRES_PORT` | `5432` | PostgreSQL port |
-| `POSTGRES_DB` | `nyc_taxi` | PostgreSQL database |
-| `POSTGRES_USER` | `postgres` | PostgreSQL user |
-| `POSTGRES_PASSWORD` | `postgres` | PostgreSQL password |
+| Variable | Description |
+|----------|-------------|
+| `MINIO_ENDPOINT` | MinIO server endpoint |
+| `MINIO_ACCESS_KEY` | MinIO access key |
+| `MINIO_SECRET_KEY` | MinIO secret key |
+| `MINIO_BUCKET` | MinIO bucket name |
+| `POSTGRES_HOST` | PostgreSQL host |
+| `POSTGRES_PORT` | PostgreSQL port |
+| `POSTGRES_DB` | PostgreSQL database |
+| `POSTGRES_USER` | PostgreSQL user |
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+
+> **Note:** Never commit credentials to version control. Use environment variables, secrets managers, or CI/CD secrets for production deployments.
 
 ## License
 
