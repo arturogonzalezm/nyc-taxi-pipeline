@@ -10,15 +10,11 @@ A PySpark-based ETL pipeline for processing NYC Taxi & Limousine Commission (TLC
 
 ## Table of Contents
 
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Running the Pipeline](#running-the-pipeline)
-- [Makefile Commands](#makefile-commands)
-- [Project Structure](#project-structure)
-- [Data Model](#data-model)
-- [Testing](#testing)
-- [Documentation](#documentation)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Dataset Explanation](docs/DATASET.md)
+- [Data Model and Schema](docs/DATA_MODEL.md)
+- [Historical Strategy](docs/HISTORICAL_STRATEGY.md)
+- [How to Run Locally](docs/LOCAL_SETUP.md)
 
 ## Architecture
 
@@ -326,7 +322,3 @@ Configure via environment variables or a secrets manager. Required variables:
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 
 > **Note:** Never commit credentials to version control. Use environment variables, secrets managers, or CI/CD secrets for production deployments.
-
-## License
-
-MIT License
