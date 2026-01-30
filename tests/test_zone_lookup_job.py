@@ -2,8 +2,6 @@
 Tests for ZoneLookupIngestionJob to improve coverage.
 """
 
-import pytest
-from unittest.mock import patch
 
 from etl.jobs.bronze.zone_lookup_ingestion_job import (
     ZoneLookupIngestionJob,

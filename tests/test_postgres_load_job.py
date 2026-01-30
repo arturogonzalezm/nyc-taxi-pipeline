@@ -221,3 +221,49 @@ class TestRunPostgresLoadFunction:
         with patch.object(PostgresLoadJob, "run", return_value=True):
             result = run_postgres_load("green")
             assert result is True
+
+
+class TestPostgresLoadJobLoad:
+    """Tests for PostgresLoadJob.load method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_load_calls_dimension_and_fact_loaders(self):
+        """Test that load calls dimension and fact table loaders."""
+        job = PostgresLoadJob("yellow")
+        mock_data = {
+            "dim_date": MagicMock(),
+            "dim_location": MagicMock(),
+            "dim_time": MagicMock(),
+            "dim_payment": MagicMock(),
+            "dim_rate": MagicMock(),
+            "fact_trip": MagicMock(),
+        }
+        with patch.object(job, "_load_dimension") as mock_load_dim:
+            with patch.object(job, "_load_fact_table") as mock_load_fact:
+                job.load(mock_data)
+                # Should call _load_dimension for each dimension
+                assert mock_load_dim.call_count >= 1
+                # Should call _load_fact_table for fact table
+                mock_load_fact.assert_called_once()
+
+
+class TestPostgresLoadJobConfig:
+    """Tests for PostgresLoadJob configuration."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_config_uses_job_config(self):
+        """Test that job uses JobConfig."""
+        job = PostgresLoadJob("yellow")
+        assert job.config is not None
+
+    def test_custom_config_is_used(self):
+        """Test that custom config is used when provided."""
+        config = JobConfig()
+        job = PostgresLoadJob("yellow", config=config)
+        assert job.config is config

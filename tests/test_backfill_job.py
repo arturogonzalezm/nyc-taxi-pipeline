@@ -2,7 +2,7 @@
 Tests for taxi_injection_safe_backfill_job to improve coverage.
 """
 
-import pytest
+
 from unittest.mock import patch, MagicMock
 
 from etl.jobs.bronze.taxi_injection_safe_backfill_job import (

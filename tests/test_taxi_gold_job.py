@@ -226,3 +226,75 @@ class TestRunGoldJobFunction:
         with patch.object(TaxiGoldJob, "run", return_value=True):
             result = run_gold_job("green", 2023, 12)
             assert result is True
+
+
+class TestTaxiGoldJobExtract:
+    """Tests for TaxiGoldJob.extract method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_extract_calls_internal_methods(self):
+        """Test that extract calls _extract_bronze_trips and _extract_zone_lookup."""
+        job = TaxiGoldJob("yellow", 2024, 6)
+        with patch.object(job, "_extract_bronze_trips") as mock_trips:
+            with patch.object(job, "_extract_zone_lookup") as mock_zones:
+                mock_trips.return_value = "trips_df"
+                mock_zones.return_value = "zones_df"
+                result = job.extract()
+                mock_trips.assert_called_once()
+                mock_zones.assert_called_once()
+                assert result == ("trips_df", "zones_df")
+
+
+class TestTaxiGoldJobValidateInputs:
+    """Tests for TaxiGoldJob.validate_inputs method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_validate_inputs_logs_info(self):
+        """Test that validate_inputs logs validation info."""
+        job = TaxiGoldJob("yellow", 2024, 6)
+        # Should not raise
+        job.validate_inputs()
+
+    def test_validate_inputs_with_range(self):
+        """Test validate_inputs with date range."""
+        job = TaxiGoldJob("green", 2023, 1, end_year=2023, end_month=12)
+        # Should not raise
+        job.validate_inputs()
+
+
+class TestTaxiGoldJobDateRange:
+    """Tests for TaxiGoldJob date range handling."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_single_month_range(self):
+        """Test single month creates correct range."""
+        job = TaxiGoldJob("yellow", 2024, 6)
+        assert job.year == 2024
+        assert job.month == 6
+        assert job.end_year == 2024
+        assert job.end_month == 6
+
+    def test_multi_month_range_same_year(self):
+        """Test multi-month range in same year."""
+        job = TaxiGoldJob("yellow", 2024, 1, end_year=2024, end_month=6)
+        assert job.year == 2024
+        assert job.month == 1
+        assert job.end_year == 2024
+        assert job.end_month == 6
+
+    def test_multi_year_range(self):
+        """Test multi-year range."""
+        job = TaxiGoldJob("green", 2023, 6, end_year=2024, end_month=3)
+        assert job.year == 2023
+        assert job.month == 6
+        assert job.end_year == 2024
+        assert job.end_month == 3

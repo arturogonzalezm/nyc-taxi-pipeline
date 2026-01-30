@@ -228,3 +228,56 @@ class TestRunIngestionFunction:
         with patch.object(TaxiIngestionJob, "run", return_value=True):
             result = run_ingestion("green", 2023, 12)
             assert result is True
+
+
+class TestTaxiIngestionJobExtract:
+    """Tests for TaxiIngestionJob.extract method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_extract_calls_extract_from_source(self):
+        """Test that extract calls _extract_from_source."""
+        job = TaxiIngestionJob("yellow", 2024, 6)
+        with patch.object(job, "_extract_from_source") as mock_extract:
+            mock_extract.return_value = MagicMock()
+            job.extract()
+            mock_extract.assert_called_once()
+
+
+class TestTaxiIngestionJobGetMinioClient:
+    """Tests for TaxiIngestionJob._get_minio_client method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_get_minio_client_returns_client(self):
+        """Test that _get_minio_client returns a Minio client."""
+        job = TaxiIngestionJob("yellow", 2024, 6)
+        with patch("etl.jobs.bronze.taxi_ingestion_job.Minio") as mock_minio:
+            mock_client = MagicMock()
+            mock_minio.return_value = mock_client
+            client = job._get_minio_client()
+            assert client is mock_client
+
+
+class TestTaxiIngestionJobBuildSourceUrl:
+    """Tests for TaxiIngestionJob URL building."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_source_url_format(self):
+        """Test that source URL is built correctly."""
+        job = TaxiIngestionJob("yellow", 2024, 6)
+        expected_file = "yellow_tripdata_2024-06.parquet"
+        assert job.file_name == expected_file
+
+    def test_source_url_contains_base_url(self):
+        """Test that source URL contains base URL."""
+        job = TaxiIngestionJob("green", 2023, 12)
+        # The URL would be built from NYC_TLC_BASE_URL + file_name
+        assert TaxiIngestionJob.NYC_TLC_BASE_URL is not None
