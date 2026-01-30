@@ -4,6 +4,19 @@
 
 The pipeline implements a robust strategy for handling historical data ingestion, backfills, and reprocessing. This ensures data consistency, prevents duplicates, and supports incremental updates.
 
+## SCD Type 1 (Slowly Changing Dimension Type 1)
+
+This pipeline uses **SCD Type 1** for dimension management, which means:
+
+- **Overwrites**: When a dimension record changes, the old value is overwritten with the new value
+- **No History**: Previous values are not preserved; only the current state is stored
+- **Simplicity**: Easiest to implement and maintain
+- **Use Case**: Appropriate when historical dimension values are not needed for analysis
+
+### Why SCD Type 1?
+
+For NYC taxi data, dimension attributes (zones, payment types) rarely change, and when they do, historical accuracy of the old values is not critical for trip analysis. The focus is on current operational reporting rather than tracking how dimensions evolved over time.
+
 ## Key Principles
 
 1. **Idempotency**: Running the same job multiple times produces the same result

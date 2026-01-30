@@ -2,7 +2,20 @@
 
 ## Overview
 
-The pipeline implements a **star schema** dimensional model optimized for analytical queries. The model consists of one fact table and three dimension tables.
+The pipeline implements a **Kimball-style star schema** dimensional model optimized for analytical queries. This approach follows Ralph Kimball's dimensional modeling methodology, which is the industry standard for data warehouse design.
+
+### Kimball Methodology
+
+Key Kimball principles applied in this model:
+
+- **Star Schema**: Central fact table surrounded by dimension tables
+- **Conformed Dimensions**: Reusable dimensions (date, location) that can be shared across fact tables
+- **Surrogate Keys**: Integer-based keys for dimensions (e.g., `date_key`, `location_id`)
+- **Denormalized Dimensions**: Dimensions contain descriptive attributes for easy querying
+- **SCD Type 1**: Dimensions use overwrite strategy (see [Historical Strategy](HISTORICAL_STRATEGY.md))
+- **Grain**: One row per taxi trip in the fact table
+
+The model consists of one fact table and three dimension tables.
 
 ## Star Schema Diagram
 
