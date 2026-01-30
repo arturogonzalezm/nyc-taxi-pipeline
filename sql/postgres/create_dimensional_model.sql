@@ -27,15 +27,25 @@ CREATE TABLE IF NOT EXISTS dim_date
     day_of_week      INTEGER     NOT NULL,
     day_of_week_name VARCHAR(20) NOT NULL,
     is_weekend       BOOLEAN     NOT NULL,
-    week_of_year     INTEGER     NOT NULL
+    week_of_year     INTEGER     NOT NULL,
+    -- Gold layer metadata
+    created_timestamp TIMESTAMP   NOT NULL,
+    data_layer       VARCHAR(10) NOT NULL,
+    -- Load layer metadata
+    postgres_load_timestamp TIMESTAMP NOT NULL,
+    postgres_load_date      DATE      NOT NULL,
+    load_job_name           VARCHAR(100)
 );
 
 CREATE INDEX idx_dim_date_date ON dim_date (date);
 CREATE INDEX idx_dim_date_year_month ON dim_date (year, month);
+CREATE INDEX idx_dim_date_load_timestamp ON dim_date (postgres_load_timestamp);
 
 COMMENT ON TABLE dim_date IS 'Date dimension with calendar attributes';
 COMMENT ON COLUMN dim_date.date_key IS 'Surrogate key in YYYYMMDD format';
 COMMENT ON COLUMN dim_date.is_weekend IS 'True if Saturday or Sunday';
+COMMENT ON COLUMN dim_date.created_timestamp IS 'Gold layer creation timestamp';
+COMMENT ON COLUMN dim_date.postgres_load_timestamp IS 'PostgreSQL load timestamp';
 
 -- Dimension: Location (NYC Taxi Zones)
 -- Grain: One row per taxi zone
@@ -45,15 +55,25 @@ CREATE TABLE IF NOT EXISTS dim_location
     location_key INTEGER PRIMARY KEY,
     borough      VARCHAR(50)  NOT NULL,
     zone         VARCHAR(100) NOT NULL,
-    service_zone VARCHAR(50)  NOT NULL
+    service_zone VARCHAR(50)  NOT NULL,
+    -- Gold layer metadata
+    created_timestamp TIMESTAMP   NOT NULL,
+    data_layer       VARCHAR(10) NOT NULL,
+    -- Load layer metadata
+    postgres_load_timestamp TIMESTAMP NOT NULL,
+    postgres_load_date      DATE      NOT NULL,
+    load_job_name           VARCHAR(100)
 );
 
 CREATE INDEX idx_dim_location_borough ON dim_location (borough);
 CREATE INDEX idx_dim_location_service_zone ON dim_location (service_zone);
+CREATE INDEX idx_dim_location_load_timestamp ON dim_location (postgres_load_timestamp);
 
 COMMENT ON TABLE dim_location IS 'NYC taxi zone dimension';
 COMMENT ON COLUMN dim_location.location_key IS 'LocationID from NYC TLC';
 COMMENT ON COLUMN dim_location.service_zone IS 'Yellow Zone, Boro Zone, or EWR';
+COMMENT ON COLUMN dim_location.created_timestamp IS 'Gold layer creation timestamp';
+COMMENT ON COLUMN dim_location.postgres_load_timestamp IS 'PostgreSQL load timestamp';
 
 -- Dimension: Payment
 -- Grain: One row per (payment_type, rate_code) combination
@@ -64,14 +84,24 @@ CREATE TABLE IF NOT EXISTS dim_payment
     payment_type_id   INTEGER      NOT NULL,
     payment_type_desc VARCHAR(50)  NOT NULL,
     rate_code_id      INTEGER      NOT NULL,
-    rate_code_desc    VARCHAR(100) NOT NULL
+    rate_code_desc    VARCHAR(100) NOT NULL,
+    -- Gold layer metadata
+    created_timestamp TIMESTAMP   NOT NULL,
+    data_layer       VARCHAR(10) NOT NULL,
+    -- Load layer metadata
+    postgres_load_timestamp TIMESTAMP NOT NULL,
+    postgres_load_date      DATE      NOT NULL,
+    load_job_name           VARCHAR(100)
 );
 
 CREATE INDEX idx_dim_payment_type ON dim_payment (payment_type_id);
 CREATE INDEX idx_dim_payment_rate ON dim_payment (rate_code_id);
+CREATE INDEX idx_dim_payment_load_timestamp ON dim_payment (postgres_load_timestamp);
 
 COMMENT ON TABLE dim_payment IS 'Payment type and rate code dimension';
 COMMENT ON COLUMN dim_payment.payment_key IS 'Surrogate key (BIGINT)';
+COMMENT ON COLUMN dim_payment.created_timestamp IS 'Gold layer creation timestamp';
+COMMENT ON COLUMN dim_payment.postgres_load_timestamp IS 'PostgreSQL load timestamp';
 
 -- ============================================================================
 -- Fact Table
@@ -103,12 +133,26 @@ CREATE TABLE IF NOT EXISTS fact_trip
     avg_speed_mph         DOUBLE PRECISION,
     partition_year        INTEGER   NOT NULL,
     partition_month       INTEGER   NOT NULL,
+    -- Gold layer metadata
+    gold_transformation_timestamp TIMESTAMP   NOT NULL,
+    gold_transformation_date      DATE        NOT NULL,
+    gold_job_name                 VARCHAR(100),
+    data_layer                    VARCHAR(10) NOT NULL,
+    -- Load layer metadata
+    postgres_load_timestamp TIMESTAMP NOT NULL,
+    postgres_load_date      DATE      NOT NULL,
+    load_job_name           VARCHAR(100),
+    -- Hash for idempotency and data integrity
+    fact_hash             VARCHAR(64) NOT NULL,
 
     -- Foreign key constraints
     CONSTRAINT fk_fact_trip_date FOREIGN KEY (date_key) REFERENCES dim_date (date_key),
     CONSTRAINT fk_fact_trip_pickup_location FOREIGN KEY (pickup_location_key) REFERENCES dim_location (location_key),
     CONSTRAINT fk_fact_trip_dropoff_location FOREIGN KEY (dropoff_location_key) REFERENCES dim_location (location_key),
-    CONSTRAINT fk_fact_trip_payment FOREIGN KEY (payment_key) REFERENCES dim_payment (payment_key)
+    CONSTRAINT fk_fact_trip_payment FOREIGN KEY (payment_key) REFERENCES dim_payment (payment_key),
+
+    -- Unique constraint on fact_hash for idempotency
+    CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)
 );
 
 -- Indexes for query performance
@@ -118,6 +162,9 @@ CREATE INDEX idx_fact_trip_dropoff_location ON fact_trip (dropoff_location_key);
 CREATE INDEX idx_fact_trip_payment_key ON fact_trip (payment_key);
 CREATE INDEX idx_fact_trip_pickup_datetime ON fact_trip (pickup_datetime);
 CREATE INDEX idx_fact_trip_partition ON fact_trip (partition_year, partition_month);
+CREATE INDEX idx_fact_trip_gold_timestamp ON fact_trip (gold_transformation_timestamp);
+CREATE INDEX idx_fact_trip_load_timestamp ON fact_trip (postgres_load_timestamp);
+CREATE INDEX idx_fact_trip_fact_hash ON fact_trip (fact_hash);
 
 -- Composite indexes for common queries
 CREATE INDEX idx_fact_trip_date_pickup_loc ON fact_trip (date_key, pickup_location_key);
@@ -128,6 +175,10 @@ COMMENT ON COLUMN fact_trip.trip_key IS 'Surrogate key (BIGINT for large dataset
 COMMENT ON COLUMN fact_trip.trip_distance IS 'Trip distance in miles';
 COMMENT ON COLUMN fact_trip.trip_duration_seconds IS 'Duration in seconds';
 COMMENT ON COLUMN fact_trip.total_amount IS 'Total fare in USD';
+COMMENT ON COLUMN fact_trip.gold_transformation_timestamp IS 'Gold layer transformation timestamp';
+COMMENT ON COLUMN fact_trip.postgres_load_timestamp IS 'PostgreSQL load timestamp';
+COMMENT ON COLUMN fact_trip.fact_hash IS 'SHA-256 hash of business columns for idempotency and data integrity';
+COMMENT ON CONSTRAINT uq_fact_trip_hash ON fact_trip IS 'Ensures idempotent loads - prevents duplicate records';
 
 -- ============================================================================
 -- Partitioning (PostgreSQL 10+)

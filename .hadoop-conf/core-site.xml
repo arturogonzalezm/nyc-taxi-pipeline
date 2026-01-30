@@ -4,7 +4,7 @@
     <!-- Override all S3A timeout properties that use "60s" format in Hadoop 3.4+ -->
     <property>
         <name>fs.s3a.connection.timeout</name>
-        <value>60000</value>
+        <value>600000</value>
     </property>
     <property>
         <name>fs.s3a.connection.establish.timeout</name>
@@ -16,7 +16,7 @@
     </property>
     <property>
         <name>fs.s3a.connection.request.timeout</name>
-        <value>60000</value>
+        <value>600000</value>
     </property>
     <property>
         <name>fs.s3a.connection.idle.time</name>
@@ -24,14 +24,26 @@
     </property>
     <property>
         <name>fs.s3a.attempts.maximum</name>
-        <value>3</value>
+        <value>5</value>
     </property>
     <property>
         <name>fs.s3a.retry.interval</name>
-        <value>500</value>
+        <value>1000</value>
     </property>
     <property>
         <name>fs.s3a.retry.limit</name>
-        <value>3</value>
+        <value>5</value>
+    </property>
+    <property>
+        <name>fs.s3a.socket.send.buffer</name>
+        <value>65536</value>
+    </property>
+    <property>
+        <name>fs.s3a.socket.recv.buffer</name>
+        <value>65536</value>
+    </property>
+    <property>
+        <name>parquet.hadoop.vectored.io.enabled</name>
+        <value>false</value>
     </property>
 </configuration>

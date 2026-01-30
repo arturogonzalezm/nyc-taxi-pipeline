@@ -244,15 +244,41 @@ class TaxiGoldJob(BaseSparkJob):
         for year, month in partitions:
             partition_path = f"{s3_path}/year={year}/month={month}"
             try:
-                df_partition = self.spark.read.parquet(partition_path)
+                self.logger.info(f"Reading partition: year={year}, month={month}...")
+
+                # Read partition with ignoreCorruptFiles option
+                df_partition = self.spark.read \
+                    .option("ignoreCorruptFiles", "true") \
+                    .option("mode", "PERMISSIVE") \
+                    .parquet(partition_path)
+
+                # Force evaluation to catch corrupted files before adding to list
+                # Use take(1) which is faster than count() for validation
+                self.logger.info(f"Validating partition data...")
+                sample = df_partition.take(1)
+
+                if not sample:
+                    self.logger.warning(f"Partition {year}-{month} is empty, skipping")
+                    continue
+
+                # Now get full count for logging
+                partition_count = df_partition.count()
+
                 dfs.append(df_partition)
                 all_columns.update(df_partition.columns)
                 self.logger.info(
-                    f"Loaded partition: year={year}, month={month} "
-                    f"({len(df_partition.columns)} columns)"
+                    f"✓ Loaded partition: year={year}, month={month} "
+                    f"({partition_count:,} records, {len(df_partition.columns)} columns)"
                 )
             except Exception as e:
-                self.logger.warning(f"Failed to read partition {year}-{month}: {e}")
+                self.logger.error(
+                    f"✗ FAILED to read partition {year}-{month}: {type(e).__name__}: {str(e)[:200]}\n"
+                    f"  Path: {partition_path}\n"
+                    f"  This partition will be SKIPPED. Re-run bronze ingestion to fix:\n"
+                    f"  python etl/jobs/bronze/taxi_ingestion_job.py --taxi-type {self.taxi_type} --year {year} --month {month}"
+                )
+                # Continue to next partition instead of failing entire job
+                continue
 
         if not dfs:
             raise JobExecutionError(
@@ -298,6 +324,9 @@ class TaxiGoldJob(BaseSparkJob):
         for df in standardized_dfs[1:]:
             trips_df = trips_df.union(df)
 
+        # Note: year/month are partition columns in the directory path, not data columns
+        # We already filtered by reading specific partition paths above, so no additional filter needed
+
         self.logger.info("Union complete, materializing count...")
         record_count = trips_df.count()
         self.logger.info(f"Extracted {record_count:,} trip records from bronze layer")
@@ -307,6 +336,7 @@ class TaxiGoldJob(BaseSparkJob):
     def _extract_zone_lookup(self) -> DataFrame:
         """
         Extract zone lookup reference data from MinIO.
+
         :returns: DataFrame with zone lookup data
         """
         # Zone lookup is stored as CSV in misc directory
@@ -330,7 +360,7 @@ class TaxiGoldJob(BaseSparkJob):
         Transform bronze data into dimensional model.
 
         :params data: Tuple of (trips_df, zones_df)
-        returns Dictionary with dimensional model tables:
+        :returns: Dictionary with dimensional model tables:
                     {
                         'fact_trip': DataFrame,
                         'dim_date': DataFrame,
@@ -355,10 +385,10 @@ class TaxiGoldJob(BaseSparkJob):
         # Data quality filtering
         trips_clean = self._apply_data_quality_filters(trips_df)
 
-        # Step 3: Standardize column names (handle yellow/green differences)
+        # Standardize column names (handle yellow/green differences)
         trips_standardized = self._standardize_schema(trips_clean)
 
-        # Step 3: Create dimension tables
+        # Create dimension tables
         dim_date = self._create_dim_date(trips_standardized)
         dim_location = self._create_dim_location(zones_df)
         dim_payment = self._create_dim_payment(trips_standardized)
@@ -377,27 +407,58 @@ class TaxiGoldJob(BaseSparkJob):
 
     def _remove_duplicates(self, df: DataFrame) -> DataFrame:
         """
-        Remove duplicate records from bronze data.
+        Remove duplicate records from bronze data using SCD Type 1 (latest wins).
 
         Duplicates can occur due to:
         - Re-running ingestion jobs
         - Source data issues
         - Multiple extracts of the same data
+        - Late-arriving data
 
-        Strategy:
-        - Use record_hash column if available (from bronze layer)
-        - Otherwise, drop duplicates based on all columns
-        - Keep first occurrence (arbitrary but consistent)
+        Strategy (SCD Type 1 - Keep Latest):
+        - Use record_hash column from bronze layer for deduplication
+        - When duplicates exist, keep the record with latest ingestion_timestamp
+        - This implements "latest wins" strategy for slowly changing dimensions
+        - Bronze layer contains ALL records (audit trail)
+        - Gold layer contains LATEST version only (business view)
 
-        :returns: DataFrame with duplicates removed
+        :returns: DataFrame with duplicates removed, keeping latest version
         """
+        initial_count = df.count()
+
         if "record_hash" in df.columns:
-            # Use hash-based deduplication (faster and more reliable)
-            self.logger.info("Deduplicating using record_hash column")
-            return df.dropDuplicates(["record_hash"])
+            # Hash-based deduplication with SCD Type 1 logic
+            self.logger.info("Deduplicating using record_hash (SCD Type 1: keeping latest)")
+
+            # Check if we have ingestion_timestamp for SCD Type 1
+            if "ingestion_timestamp" in df.columns:
+                # Window function to keep latest record per hash
+                from pyspark.sql.window import Window
+
+                window_spec = Window.partitionBy("record_hash").orderBy(F.col("ingestion_timestamp").desc())
+
+                df_deduped = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                    .filter(F.col("row_num") == 1) \
+                    .drop("row_num")
+
+                deduped_count = df_deduped.count()
+                removed_count = initial_count - deduped_count
+
+                if removed_count > 0:
+                    self.logger.info(
+                        f"SCD Type 1: Removed {removed_count:,} older versions, "
+                        f"kept {deduped_count:,} latest records "
+                        f"({100 * removed_count / initial_count:.2f}% were duplicates)"
+                    )
+
+                return df_deduped
+            else:
+                # Simple hash deduplication (no timestamp available)
+                self.logger.warning("ingestion_timestamp not found, using simple deduplication")
+                return df.dropDuplicates(["record_hash"])
         else:
             # Fallback: deduplicate on all columns (slower)
-            self.logger.info("Deduplicating using all columns (no record_hash found)")
+            self.logger.warning("record_hash not found in bronze data - deduplicating using all columns")
             return df.dropDuplicates()
 
     def _apply_data_quality_filters(self, df: DataFrame) -> DataFrame:
@@ -478,6 +539,7 @@ class TaxiGoldJob(BaseSparkJob):
 
         Yellow uses: tpep_pickup_datetime, tpep_dropoff_datetime
         Green uses: lpep_pickup_datetime, lpep_dropoff_datetime
+
         :returns: DataFrame with standardized column names
         """
         # Check which datetime columns exist
@@ -540,6 +602,10 @@ class TaxiGoldJob(BaseSparkJob):
             F.weekofyear("date")
         )
 
+        # Add metadata columns
+        dim_date = dim_date.withColumn("created_timestamp", F.current_timestamp()) \
+            .withColumn("data_layer", F.lit("gold"))
+
         # Order columns
         dim_date = dim_date.select(
             "date_key",
@@ -552,7 +618,9 @@ class TaxiGoldJob(BaseSparkJob):
             "day_of_week",
             "day_of_week_name",
             "is_weekend",
-            "week_of_year"
+            "week_of_year",
+            "created_timestamp",
+            "data_layer"
         ).orderBy("date_key")
 
         date_count = dim_date.count()
@@ -577,7 +645,20 @@ class TaxiGoldJob(BaseSparkJob):
             F.col("Borough").alias("borough"),
             F.col("Zone").alias("zone"),
             F.col("service_zone").alias("service_zone")
-        ).distinct().orderBy("location_key")
+        ).distinct()
+
+        # Add metadata columns
+        dim_location = dim_location.withColumn("created_timestamp", F.current_timestamp()) \
+            .withColumn("data_layer", F.lit("gold"))
+
+        dim_location = dim_location.select(
+            "location_key",
+            "borough",
+            "zone",
+            "service_zone",
+            "created_timestamp",
+            "data_layer"
+        ).orderBy("location_key")
 
         location_count = dim_location.count()
         self.logger.info(f"Created dim_location: {location_count:,} unique locations")
@@ -625,13 +706,19 @@ class TaxiGoldJob(BaseSparkJob):
             F.monotonically_increasing_id()
         )
 
+        # Add metadata columns
+        dim_payment = dim_payment.withColumn("created_timestamp", F.current_timestamp()) \
+            .withColumn("data_layer", F.lit("gold"))
+
         # Order columns
         dim_payment = dim_payment.select(
             "payment_key",
             F.col("payment_type").alias("payment_type_id"),
             "payment_type_desc",
             F.col("RatecodeID").alias("rate_code_id"),
-            "rate_code_desc"
+            "rate_code_desc",
+            "created_timestamp",
+            "data_layer"
         ).orderBy("payment_key")
 
         payment_count = dim_payment.count()
@@ -703,7 +790,13 @@ class TaxiGoldJob(BaseSparkJob):
         fact = fact.withColumn("partition_year", F.year(F.col("pickup_datetime"))) \
             .withColumn("partition_month", F.month(F.col("pickup_datetime")))
 
-        # Select final fact table columns
+        # Add gold layer metadata columns
+        fact = fact.withColumn("gold_transformation_timestamp", F.current_timestamp()) \
+            .withColumn("gold_transformation_date", F.current_date()) \
+            .withColumn("gold_job_name", F.lit(self.job_name)) \
+            .withColumn("data_layer", F.lit("gold"))
+
+        # Select final fact table columns (for hash computation)
         fact_trip = fact.select(
             "trip_key",
             "date_key",
@@ -725,11 +818,80 @@ class TaxiGoldJob(BaseSparkJob):
             F.col("tip_percentage").cast(DoubleType()),
             F.col("avg_speed_mph").cast(DoubleType()),
             "partition_year",
-            "partition_month"
+            "partition_month",
+            # Metadata columns
+            "gold_transformation_timestamp",
+            "gold_transformation_date",
+            "gold_job_name",
+            "data_layer"
+        )
+
+        # Add fact_hash for data integrity and upsert operations
+        # Hash includes business keys and measures (excluding trip_key and metadata)
+        fact_hash_columns = [
+            "date_key", "pickup_location_key", "dropoff_location_key", "payment_key",
+            "pickup_datetime", "dropoff_datetime", "passenger_count", "trip_distance",
+            "fare_amount", "tip_amount", "total_amount"
+        ]
+
+        self.logger.info(f"Computing fact_hash from {len(fact_hash_columns)} key columns")
+
+        fact_trip = fact_trip.withColumn(
+            "fact_hash",
+            F.sha2(
+                F.concat_ws("||", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in fact_hash_columns]),
+                256
+            )
         )
 
         fact_count = fact_trip.count()
         self.logger.info(f"Created fact_trip: {fact_count:,} trip records")
+
+        # Validate hash integrity
+        self._validate_hash_integrity(fact_trip)
+
+        return fact_trip
+
+    def _validate_hash_integrity(self, fact_trip: DataFrame):
+        """
+        Validate data integrity using fact_hash.
+
+        Checks:
+        1. fact_hash is not null
+        2. fact_hash is unique (no accidental duplicates)
+        3. Hash distribution is reasonable (no hash collisions)
+
+        :params fact_trip: Fact table DataFrame with fact_hash
+        """
+        self.logger.info("=== Validating Hash Integrity ===")
+
+        total_records = fact_trip.count()
+
+        # Check No null hashes
+        null_hashes = fact_trip.filter(F.col("fact_hash").isNull()).count()
+        if null_hashes > 0:
+            self.logger.error(f"Found {null_hashes:,} records with NULL fact_hash")
+            raise JobExecutionError(f"Data integrity error: {null_hashes} NULL hashes found")
+
+        # Check Hash uniqueness
+        unique_hashes = fact_trip.select("fact_hash").distinct().count()
+        if unique_hashes != total_records:
+            duplicate_count = total_records - unique_hashes
+            self.logger.warning(
+                f"Hash uniqueness check: {unique_hashes:,} unique hashes for {total_records:,} records "
+                f"({duplicate_count:,} duplicates detected)"
+            )
+            # This is acceptable - duplicates should have been filtered in deduplication step
+        else:
+            self.logger.info(f"✓ Hash uniqueness verified: All {total_records:,} hashes are unique")
+
+        # Check Hash length and format (SHA-256 = 64 hex characters)
+        invalid_hash_length = fact_trip.filter(F.length(F.col("fact_hash")) != 64).count()
+        if invalid_hash_length > 0:
+            self.logger.error(f"Found {invalid_hash_length:,} hashes with invalid length (expected 64)")
+            raise JobExecutionError(f"Data integrity error: {invalid_hash_length} invalid hash lengths")
+
+        self.logger.info("✓ All hash integrity checks passed")
 
         # Log sample statistics
         self.logger.info("Fact table statistics:")

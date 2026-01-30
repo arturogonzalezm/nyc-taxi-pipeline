@@ -381,6 +381,7 @@ class TaxiIngestionJob(BaseSparkJob):
         Bronze Layer Transformations:
         1. Preserve raw data - no business logic transformations
         2. Add metadata columns for lineage tracking
+        3. Add record_hash for deduplication and data integrity
 
         This ensures we maintain the raw, unaltered source data while adding
         necessary metadata for downstream processing and auditing.
@@ -391,16 +392,39 @@ class TaxiIngestionJob(BaseSparkJob):
         self.logger.info(f"Processing {record_count:,} records")
         self.logger.info(f"Schema: {df.schema}")
 
+        # Identify business columns (exclude metadata columns we'll add)
+        business_columns = [col for col in df.columns]
+        self.logger.info(f"Computing record_hash from {len(business_columns)} business columns")
+
+        # Create record_hash from business columns using SHA-256
+        # This enables deduplication and tracks data changes across layers
+        # Concat all columns -> SHA-256 hash -> ensures data integrity
+        df_with_hash = df.withColumn(
+            "record_hash",
+            F.sha2(F.concat_ws("||", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in business_columns]), 256)
+        )
+
         # Add metadata columns ONLY (no business logic transformations)
-        # These metadata columns enable data lineage tracking
-        df_final = df.withColumn("ingestion_timestamp", F.current_timestamp()) \
+        # These metadata columns enable data lineage tracking and auditing
+        df_final = df_with_hash.withColumn("ingestion_timestamp", F.current_timestamp()) \
             .withColumn("ingestion_date", F.current_date()) \
             .withColumn("source_file", F.lit(self.file_name)) \
+            .withColumn("source_url", F.lit(f"{self.NYC_TLC_BASE_URL}/{self.file_name}")) \
+            .withColumn("job_name", F.lit(self.job_name)) \
+            .withColumn("data_layer", F.lit("bronze")) \
             .withColumn("year", F.lit(self.year)) \
             .withColumn("month", F.lit(self.month))
 
-        self.logger.info(f"Bronze layer gold complete: {record_count:,} records")
-        self.logger.info("Transformations applied: metadata addition only")
+        # Log hash statistics
+        unique_hashes = df_final.select("record_hash").distinct().count()
+        self.logger.info(f"Record hashes: {unique_hashes:,} unique out of {record_count:,} total")
+        if unique_hashes < record_count:
+            duplicate_count = record_count - unique_hashes
+            self.logger.warning(
+                f"Found {duplicate_count:,} duplicate records in source data ({100 * duplicate_count / record_count:.2f}%)")
+
+        self.logger.info(f"Bronze layer transformation complete: {record_count:,} records")
+        self.logger.info("Transformations applied: record_hash + metadata addition")
 
         return df_final
 
@@ -498,24 +522,49 @@ def run_bulk_ingestion(
         month = current_date.month
         total_months += 1
 
-        logger.info(f"Processing {taxi_type} taxi data for {year}-{month:02d} ({total_months})")
+        logger.info(f"=" * 80)
+        logger.info(
+            f"Processing {taxi_type} taxi data for {year}-{month:02d} ({total_months}/{(end_date.year - start_year) * 12 + end_date.month - start_month + 1})")
+        logger.info(f"=" * 80)
 
         try:
             success = run_ingestion(taxi_type, year, month)
-            results[f"{year}-{month:02d}"] = "SUCCESS" if success else "FAILED"
+
             if success:
+                results[f"{year}-{month:02d}"] = "✓ SUCCESS"
                 successful += 1
+                logger.info(f"✓ {year}-{month:02d}: SUCCESS")
             else:
+                results[f"{year}-{month:02d}"] = "✗ FAILED"
                 failed += 1
+                logger.warning(f"✗ {year}-{month:02d}: FAILED")
+
         except Exception as e:
-            logger.error(f"Error processing {year}-{month:02d}: {e}")
-            results[f"{year}-{month:02d}"] = f"ERROR: {str(e)}"
+            error_msg = str(e)
+            # Check for specific error types - be more precise with 404 detection
+            # Only skip if it's actually a download error with 404 status
+            if isinstance(e.__cause__, requests.exceptions.HTTPError) and e.__cause__.response.status_code == 404:
+                logger.warning(f"✗ {year}-{month:02d}: SKIPPED - Data not available (HTTP 404)")
+                results[f"{year}-{month:02d}"] = "⊘ SKIPPED (404 - Data not available)"
+            elif isinstance(e, DownloadError) and ("404" in error_msg or "Not Found" in error_msg):
+                logger.warning(f"✗ {year}-{month:02d}: SKIPPED - Data not available (404)")
+                results[f"{year}-{month:02d}"] = "⊘ SKIPPED (404 - Data not available)"
+            elif "timeout" in error_msg.lower():
+                logger.error(f"✗ {year}-{month:02d}: FAILED - Network timeout")
+                results[f"{year}-{month:02d}"] = "✗ FAILED (Network timeout)"
+            else:
+                logger.error(f"✗ {year}-{month:02d}: ERROR - {error_msg[:100]}")
+                results[f"{year}-{month:02d}"] = f"✗ ERROR: {error_msg[:100]}"
             failed += 1
 
         # Move to next month
         current_date += relativedelta(months=1)
 
-    logger.info(f"Bulk bronze complete: {successful}/{total_months} successful, {failed} failed")
+    logger.info(f"\n" + "=" * 80)
+    logger.info(f"Bulk ingestion complete: {successful}/{total_months} successful, {failed} failed/skipped")
+    logger.info(f"Success rate: {100 * successful / total_months:.1f}%")
+    logger.info(f"=" * 80)
+
     return results
 
 

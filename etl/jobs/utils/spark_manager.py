@@ -154,18 +154,23 @@ class SparkSessionManager:
                 # Layer 2: Set Java options to override Hadoop defaults before initialization
                 # This prevents NumberFormatException from S3A code reading time unit strings
                 java_opts = (
-                    "-Dfs.s3a.connection.timeout=60000 "
+                    "-Dfs.s3a.connection.timeout=600000 "
                     "-Dfs.s3a.connection.establish.timeout=60000 "
-                    "-Dfs.s3a.attempts.maximum=3 "
-                    "-Dfs.s3a.retry.interval=500 "
-                    "-Dfs.s3a.retry.limit=3"
+                    "-Dfs.s3a.connection.request.timeout=600000 "
+                    "-Dfs.s3a.attempts.maximum=5 "
+                    "-Dfs.s3a.retry.interval=1000 "
+                    "-Dfs.s3a.retry.limit=5 "
+                    "-Dparquet.hadoop.vectored.io.enabled=false"
                 )
 
                 # Base Spark configuration with optimizations
                 builder = SparkSession.builder \
                     .appName(app_name) \
                     .master("local[*]") \
-                    .config("spark.driver.memory", "4g") \
+                    .config("spark.driver.memory", "8g") \
+                    .config("spark.driver.maxResultSize", "2g") \
+                    .config("spark.sql.shuffle.partitions", "200") \
+                    .config("spark.default.parallelism", "8") \
                     .config("spark.driver.extraJavaOptions", java_opts) \
                     .config("spark.sql.adaptive.enabled", "true") \
                     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
@@ -182,14 +187,15 @@ class SparkSessionManager:
                         .config("spark.hadoop.fs.s3a.secret.key", minio_config['secret_key']) \
                         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
                         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-                        .config("spark.hadoop.fs.s3a.connection.timeout", "60000") \
+                        .config("spark.hadoop.fs.s3a.connection.timeout", "600000") \
                         .config("spark.hadoop.fs.s3a.connection.establish.timeout", "60000") \
                         .config("spark.hadoop.fs.s3a.connection.maximum", "100") \
-                        .config("spark.hadoop.fs.s3a.attempts.maximum", "3") \
-                        .config("spark.hadoop.fs.s3a.retry.interval", "500") \
-                        .config("spark.hadoop.fs.s3a.retry.limit", "3") \
-                        .config("spark.hadoop.fs.s3a.socket.send.buffer", "8192") \
-                        .config("spark.hadoop.fs.s3a.socket.recv.buffer", "8192") \
+                        .config("spark.hadoop.fs.s3a.attempts.maximum", "5") \
+                        .config("spark.hadoop.fs.s3a.retry.interval", "1000") \
+                        .config("spark.hadoop.fs.s3a.retry.limit", "5") \
+                        .config("spark.hadoop.fs.s3a.socket.send.buffer", "65536") \
+                        .config("spark.hadoop.fs.s3a.socket.recv.buffer", "65536") \
+                        .config("spark.hadoop.parquet.hadoop.vectored.io.enabled", "false") \
                         .config("spark.jars.packages",
                                 "org.apache.hadoop:hadoop-aws:3.4.2,"
                                 "com.amazonaws:aws-java-sdk-bundle:1.12.262,"
@@ -242,17 +248,18 @@ class SparkSessionManager:
             # Override all S3A timeout properties with numeric millisecond values
             # This prevents NumberFormatException from "60s" string values in Hadoop 3.4+
             timeout_configs = {
-                "fs.s3a.connection.timeout": "60000",
+                "fs.s3a.connection.timeout": "600000",
                 "fs.s3a.connection.establish.timeout": "60000",
                 "fs.s3a.connection.acquisition.timeout": "60000",
-                "fs.s3a.connection.request.timeout": "60000",
+                "fs.s3a.connection.request.timeout": "600000",
                 "fs.s3a.connection.idle.time": "60000",
-                "fs.s3a.attempts.maximum": "3",
-                "fs.s3a.retry.interval": "500",
-                "fs.s3a.retry.limit": "3",
+                "fs.s3a.attempts.maximum": "5",
+                "fs.s3a.retry.interval": "1000",
+                "fs.s3a.retry.limit": "5",
                 "fs.s3a.connection.maximum": "100",
-                "fs.s3a.socket.send.buffer": "8192",
-                "fs.s3a.socket.recv.buffer": "8192"
+                "fs.s3a.socket.send.buffer": "65536",
+                "fs.s3a.socket.recv.buffer": "65536",
+                "parquet.hadoop.vectored.io.enabled": "false"
             }
 
             for key, value in timeout_configs.items():

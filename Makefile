@@ -1,4 +1,4 @@
-.PHONY: up down logs nuke init help postgres-start postgres-stop postgres-create-tables postgres-shell postgres-status
+.PHONY: up down logs nuke init help postgres-start postgres-stop postgres-create-tables postgres-shell postgres-status postgres-nuke
 
 # Colors for terminal output
 GREEN := \033[0;32m
@@ -104,6 +104,33 @@ postgres-stop:
 	@echo "$(CYAN)Stopping PostgreSQL...$(NC)"
 	@docker-compose stop postgres
 	@echo "$(GREEN)PostgreSQL stopped$(NC)"
+
+postgres-nuke: postgres-stop
+	@echo "$(RED)⚠️  WARNING: This will destroy all PostgreSQL data!$(NC)"
+	@echo "$(YELLOW)Press Ctrl+C to cancel, or Enter to continue...$(NC)"
+	@read -r confirm
+	@echo "$(CYAN)Removing PostgreSQL container and volumes...$(NC)"
+	@docker-compose rm -f postgres
+	@docker volume rm nyc-taxi-pipeline_postgres_data 2>/dev/null || echo "$(YELLOW)Volume already removed$(NC)"
+	@echo "$(GREEN)✓ PostgreSQL completely removed$(NC)"
+	@echo ""
+	@echo "$(CYAN)Recreating PostgreSQL from scratch...$(NC)"
+	@docker-compose up -d postgres
+	@echo "$(CYAN)Waiting for PostgreSQL to initialize and run init scripts...$(NC)"
+	@sleep 8
+	@until docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do \
+		echo "$(YELLOW)  Still initializing...$(NC)"; \
+		sleep 2; \
+	done
+	@echo "$(GREEN)✓ PostgreSQL is ready!$(NC)"
+	@echo ""
+	@echo "$(CYAN)Verifying database and tables...$(NC)"
+	@docker-compose exec -T postgres psql -U postgres -d nyc_taxi -c "\dt taxi.*" || echo "$(RED)Tables not created yet$(NC)"
+	@echo ""
+	@echo "$(GREEN)✓ PostgreSQL recreated with fresh schema!$(NC)"
+	@echo "$(YELLOW)Schema: taxi$(NC)"
+	@echo "$(YELLOW)Tables: dim_date, dim_location, dim_payment, fact_trip$(NC)"
+	@echo "$(YELLOW)All indexes and constraints created automatically$(NC)"
 
 postgres-create-tables: postgres-start
 	@echo "$(CYAN)Creating PostgreSQL tables...$(NC)"
