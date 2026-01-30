@@ -21,20 +21,19 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install black flake8 pylint
-          pip install -r pyspark/requirements.txt
+          pip install ".[dev]"
 
       - name: Check code formatting with Black
         run: |
-          black pyspark/ tests/ --check --diff
+          black etl/ tests/ --check --diff
 
       - name: Lint with flake8
         run: |
-          flake8 pyspark/ --max-line-length=100 --ignore=E501,W503
+          flake8 etl/ --max-line-length=100 --ignore=E501,W503
 
       - name: Lint with pylint
         run: |
-          pylint pyspark/ --disable=C0111,R0903,C0103 || true
+          pylint etl/ --disable=C0111,R0903,C0103 || true
 
   test:
     name: Unit Tests
@@ -50,12 +49,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-cov
-          pip install -r pyspark/requirements.txt
+          pip install ".[dev]"
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ -v --cov=pyspark --cov-report=xml --cov-report=term
+          pytest tests/ -v --cov=etl --cov-report=xml --cov-report=term
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
@@ -63,33 +61,6 @@ jobs:
           file: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
-
-  terraform-validate:
-    name: Terraform Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.0
-
-      - name: Terraform Format Check
-        run: |
-          cd terraform
-          terraform fmt -check -recursive
-
-      - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init -backend=false
-
-      - name: Terraform Validate
-        run: |
-          cd terraform
-          terraform validate
 
   integration-test-local:
     name: Local Integration Test
@@ -106,7 +77,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r pyspark/requirements.txt
+          pip install .
 
       - name: Create test data directories
         run: |
@@ -116,12 +87,12 @@ jobs:
         run: |
           echo "Bronze ingestion test would run here"
           # Commented out to avoid actual downloads in CI
-          # python pyspark/jobs/bronze_ingestion.py --months 2023-01 --mode local
+          # python etl/jobs/bronze_ingestion.py --months 2023-01 --mode local
 
       - name: Run gold gold (test mode)
         run: |
           echo "Gold transformation test would run here"
-          # python pyspark/jobs/gold_transformation.py --months 2023-01 --mode local
+          # python etl/jobs/gold_transformation.py --months 2023-01 --mode local
 
   security-scan:
     name: Security Scan
