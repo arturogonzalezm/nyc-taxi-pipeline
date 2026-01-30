@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/arturogonzalezm/nyc-taxi-pipeline/graph/badge.svg?token=4jNHztzVjc)](https://codecov.io/gh/arturogonzalezm/nyc-taxi-pipeline)
+
 # NYC Taxi Data Pipeline
 
 A **production-grade data pipeline** for processing NYC Taxi data with:
@@ -85,8 +87,8 @@ You should see:
 make local-run MONTHS=2023-01
 
 # This runs:
-# - Bronze ingestion (downloads NYC data)
-# - Gold transformation (creates dimensional model)  
+# - Bronze bronze (downloads NYC data)
+# - Gold gold (creates dimensional model)  
 # - PostgreSQL loading (loads star schema)
 ```
 
