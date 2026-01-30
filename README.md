@@ -291,20 +291,6 @@ flake8 etl/ --max-line-length=100 --ignore=E501,W503
 pylint etl/
 ```
 
-## Documentation
-
-Additional documentation is available in the `docs/` directory:
-
-| Document | Description |
-|----------|-------------|
-| [QUICK_START.md](docs/QUICK_START.md) | Quick reference guide |
-| [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Detailed project structure |
-| [HISTORICAL_INGESTION_GUIDE.md](docs/HISTORICAL_INGESTION_GUIDE.md) | Complete ingestion guide |
-| [GOLD_LAYER_DIMENSIONAL_MODEL.md](docs/GOLD_LAYER_DIMENSIONAL_MODEL.md) | Dimensional model details |
-| [LOAD_LAYER_GUIDE.md](docs/LOAD_LAYER_GUIDE.md) | PostgreSQL loading guide |
-| [POSTGRES_MAKEFILE_GUIDE.md](docs/POSTGRES_MAKEFILE_GUIDE.md) | PostgreSQL Makefile commands |
-| [DOCKER_CLEANUP_GUIDE.md](docs/DOCKER_CLEANUP_GUIDE.md) | Docker cleanup instructions |
-
 ## Environment Variables
 
 Configure via environment variables or a secrets manager. Required variables:
