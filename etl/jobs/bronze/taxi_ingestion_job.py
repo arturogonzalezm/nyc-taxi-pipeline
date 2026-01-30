@@ -30,7 +30,6 @@ Design Patterns:
 """
 import sys
 import requests
-import logging
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -46,8 +45,6 @@ from minio.error import S3Error
 
 from etl.jobs.base_job import BaseSparkJob, JobExecutionError
 from etl.jobs.utils.config import JobConfig
-
-logger = logging.getLogger(__name__)
 
 
 class DataValidationError(JobExecutionError):
@@ -265,7 +262,7 @@ class TaxiIngestionJob(BaseSparkJob):
             minio_client.stat_object(self.config.minio.bucket, cache_object)
             self.logger.info(f"Cache hit - loading from MinIO: {s3_cache_path}")
             return self.spark.read.parquet(s3_cache_path)
-        except S3Error as e:
+        except S3Error:
             # File doesn't exist in cache - proceed with download
             self.logger.info(f"Cache miss - will download from NYC TLC")
 
@@ -602,7 +599,7 @@ if __name__ == "__main__":
             print(f"{period}: {result}")
 
         # Exit with success if all succeeded
-        failed_count = sum(1 for r in results.values() if r != "SUCCESS")
+        failed_count = sum(1 for r in results.values() if "SUCCESS" not in r)
         exit(0 if failed_count == 0 else 1)
     else:
         parser.error(

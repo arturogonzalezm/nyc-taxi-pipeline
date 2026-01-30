@@ -28,7 +28,7 @@ Usage:
 import sys
 import logging
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 from datetime import datetime
 
 # Add project root to path
@@ -123,7 +123,7 @@ def safe_backfill_month(
     year: int,
     month: int,
     delete_existing: bool
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Safely backfill a single month.
     :returns: Dictionary with results

@@ -44,7 +44,7 @@ import logging
 from typing import Literal, Optional, Tuple
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import IntegerType, DoubleType, TimestampType
+from pyspark.sql.types import IntegerType, DoubleType
 
 from etl.jobs.base_job import BaseSparkJob, JobExecutionError
 from etl.jobs.utils.config import JobConfig

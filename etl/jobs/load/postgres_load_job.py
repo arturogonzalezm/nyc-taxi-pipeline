@@ -207,7 +207,6 @@ class PostgresLoadJob(BaseSparkJob):
         :params dimensional_model: Dictionary with dimensional model DataFrames
         :returns: Dictionary with metadata-enriched DataFrames
         """
-        from pyspark.sql import functions as F
 
         self.logger.info("=== Preparing data for PostgreSQL ===")
 
@@ -313,11 +312,11 @@ class PostgresLoadJob(BaseSparkJob):
             self.logger.info(f"Inserting {record_count:,} records into {table_name}...")
             df.write \
                 .jdbc(
-                    url=self.postgres_url,
-                    table=table_name,
-                    mode="append",  # Append to empty table after truncate
-                    properties=self.postgres_properties
-                )
+                url=self.postgres_url,
+                table=table_name,
+                mode="append",  # Append to empty table after truncate
+                properties=self.postgres_properties
+            )
 
             self.logger.info(f"✓ Loaded {dim_name}: {record_count:,} records")
 
@@ -392,11 +391,11 @@ class PostgresLoadJob(BaseSparkJob):
             self.logger.info(f"Loading {record_count:,} records into temporary table...")
             df.write \
                 .jdbc(
-                    url=self.postgres_url,
-                    table=temp_table,
-                    mode="overwrite",  # Drop/create temp table
-                    properties=self.postgres_properties
-                )
+                url=self.postgres_url,
+                table=temp_table,
+                mode="overwrite",  # Drop/create temp table
+                properties=self.postgres_properties
+            )
 
             # Create index on fact_hash for fast upsert lookups
             # Without this, the ON CONFLICT check scans the entire temp table (slow!)
@@ -458,7 +457,8 @@ class PostgresLoadJob(BaseSparkJob):
                 existing_indexes = cursor.fetchall()
 
                 if existing_indexes:
-                    self.logger.info(f"Dropping ALL {len(existing_indexes)} indexes (including PK) for fastest bulk insert...")
+                    self.logger.info(
+                        f"Dropping ALL {len(existing_indexes)} indexes (including PK) for fastest bulk insert...")
 
                     # First, drop FK constraints that reference this table's PK
                     self.logger.info("Temporarily dropping FK constraints...")
@@ -565,14 +565,16 @@ class PostgresLoadJob(BaseSparkJob):
                     for idx_name, idx_def in list(index_definitions.items()):
                         if 'fact_trip_pkey' in idx_name:
                             self.logger.info("  Creating PRIMARY KEY constraint...")
-                            cursor.execute(f"ALTER TABLE {target_table} ADD CONSTRAINT fact_trip_pkey PRIMARY KEY (trip_key)")
+                            cursor.execute(
+                                f"ALTER TABLE {target_table} ADD CONSTRAINT fact_trip_pkey PRIMARY KEY (trip_key)")
                             conn.commit()
                             pk_created = True
                             self.logger.info("  ✓ PRIMARY KEY created")
                             del index_definitions[idx_name]  # Remove from dict
                         elif 'uq_fact_trip_hash' in idx_name:
                             self.logger.info("  Creating UNIQUE constraint on fact_hash...")
-                            cursor.execute(f"ALTER TABLE {target_table} ADD CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)")
+                            cursor.execute(
+                                f"ALTER TABLE {target_table} ADD CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)")
                             conn.commit()
                             unique_created = True
                             self.logger.info("  ✓ UNIQUE constraint created")
@@ -627,7 +629,6 @@ class PostgresLoadJob(BaseSparkJob):
         except Exception as e:
             self.logger.error(f"Unexpected error during upsert: {e}")
             raise JobExecutionError(f"Upsert failed: {e}") from e
-
 
 
 def run_postgres_load(
