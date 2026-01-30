@@ -42,7 +42,7 @@ class TestSparkSessionManagerGetSession:
         SparkSessionManager._instance = mock_session
 
         try:
-            SparkSessionManager.get_session("TestApp", enable_s3=False)
+            result = SparkSessionManager.get_session("TestApp", enable_s3=False)
             assert result is mock_session
         finally:
             SparkSessionManager._instance = original_instance

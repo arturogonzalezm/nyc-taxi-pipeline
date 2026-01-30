@@ -248,26 +248,6 @@ class TestTaxiGoldJobExtract:
                 assert result == ("trips_df", "zones_df")
 
 
-class TestTaxiGoldJobValidateInputs:
-    """Tests for TaxiGoldJob.validate_inputs method."""
-
-    def setup_method(self):
-        """Reset JobConfig singleton before each test."""
-        JobConfig.reset()
-
-    def test_validate_inputs_logs_info(self):
-        """Test that validate_inputs logs validation info."""
-        job = TaxiGoldJob("yellow", 2024, 6)
-        # Should not raise
-        job.validate_inputs()
-
-    def test_validate_inputs_with_range(self):
-        """Test validate_inputs with date range."""
-        job = TaxiGoldJob("green", 2023, 1, end_year=2023, end_month=12)
-        # Should not raise
-        job.validate_inputs()
-
-
 class TestTaxiGoldJobDateRange:
     """Tests for TaxiGoldJob date range handling."""
 

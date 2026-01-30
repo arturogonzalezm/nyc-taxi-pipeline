@@ -2,7 +2,6 @@
 Tests for bulk ingestion functionality in taxi_ingestion_job.
 """
 
-
 from unittest.mock import patch, MagicMock
 
 from etl.jobs.bronze.taxi_ingestion_job import (
@@ -22,9 +21,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_single_month(self):
         """Test bulk ingestion with single month."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.return_value = True
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 1)
             assert "2024-01" in results
@@ -32,9 +29,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_multiple_months(self):
         """Test bulk ingestion with multiple months."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.return_value = True
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 3)
             assert len(results) == 3
@@ -44,9 +39,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_cross_year(self):
         """Test bulk ingestion crossing year boundary."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.return_value = True
             results = run_bulk_ingestion("yellow", 2023, 11, 2024, 2)
             assert len(results) == 4
@@ -57,9 +50,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_handles_failure(self):
         """Test bulk ingestion handles job failure."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.return_value = False
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 1)
             assert "2024-01" in results
@@ -67,9 +58,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_handles_exception(self):
         """Test bulk ingestion handles exceptions."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.side_effect = Exception("Test error")
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 1)
             assert "2024-01" in results
@@ -77,9 +66,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_handles_download_error_404(self):
         """Test bulk ingestion handles 404 download errors."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             error = DownloadError("HTTP 404: Not Found")
             mock_run.side_effect = error
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 1)
@@ -88,9 +75,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_with_green_taxi(self):
         """Test bulk ingestion with green taxi type."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             mock_run.return_value = True
             results = run_bulk_ingestion("green", 2024, 1, 2024, 2)
             assert len(results) == 2
@@ -98,9 +83,7 @@ class TestRunBulkIngestion:
 
     def test_run_bulk_ingestion_continues_after_failure(self):
         """Test that bulk ingestion continues processing after a failure."""
-        with patch(
-            "etl.jobs.bronze.taxi_ingestion_job.run_ingestion"
-        ) as mock_run:
+        with patch("etl.jobs.bronze.taxi_ingestion_job.run_ingestion") as mock_run:
             # First call fails, second succeeds
             mock_run.side_effect = [False, True]
             results = run_bulk_ingestion("yellow", 2024, 1, 2024, 2)

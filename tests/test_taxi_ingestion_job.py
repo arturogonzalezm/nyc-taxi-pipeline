@@ -278,6 +278,6 @@ class TestTaxiIngestionJobBuildSourceUrl:
 
     def test_source_url_contains_base_url(self):
         """Test that source URL contains base URL."""
-        job = TaxiIngestionJob("green", 2023, 12)
+        TaxiIngestionJob("green", 2023, 12)
         # The URL would be built from NYC_TLC_BASE_URL + file_name
         assert TaxiIngestionJob.NYC_TLC_BASE_URL is not None

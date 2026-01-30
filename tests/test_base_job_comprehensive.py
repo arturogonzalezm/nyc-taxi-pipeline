@@ -3,7 +3,6 @@ Comprehensive tests for BaseSparkJob class to improve coverage.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 from etl.jobs.base_job import BaseSparkJob, JobExecutionError
 from etl.jobs.utils.config import JobConfig
@@ -136,7 +135,9 @@ class TestBaseSparkJobRun:
     def test_run_successful_job(self, monkeypatch):
         """Test running a successful job."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _SuccessfulJob("test_success")
@@ -152,7 +153,9 @@ class TestBaseSparkJobRun:
     def test_run_sets_metrics_on_success(self, monkeypatch):
         """Test that metrics are set correctly on success."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _SuccessfulJob("test_metrics")
@@ -167,7 +170,9 @@ class TestBaseSparkJobRun:
     def test_run_failing_validation_raises_error(self, monkeypatch):
         """Test that validation failure raises JobExecutionError."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _FailingValidationJob("test_validation_fail")
@@ -177,7 +182,9 @@ class TestBaseSparkJobRun:
     def test_run_extract_none_raises_error(self, monkeypatch):
         """Test that extract returning None raises JobExecutionError."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _FailingExtractJob("test_extract_none")
@@ -188,7 +195,9 @@ class TestBaseSparkJobRun:
     def test_run_transform_none_raises_error(self, monkeypatch):
         """Test that transform returning None raises JobExecutionError."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _FailingTransformJob("test_transform_none")
@@ -199,7 +208,9 @@ class TestBaseSparkJobRun:
     def test_run_load_failure_raises_error(self, monkeypatch):
         """Test that load failure raises JobExecutionError."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _FailingLoadJob("test_load_fail")
@@ -210,7 +221,9 @@ class TestBaseSparkJobRun:
     def test_run_transform_exception_raises_error(self, monkeypatch):
         """Test that transform exception raises JobExecutionError."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _ExceptionInTransformJob("test_transform_exception")
@@ -221,7 +234,9 @@ class TestBaseSparkJobRun:
     def test_run_sets_error_metrics_on_failure(self, monkeypatch):
         """Test that error metrics are set on failure."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _FailingLoadJob("test_error_metrics")
@@ -238,7 +253,9 @@ class TestBaseSparkJobRun:
     def test_cleanup_called_on_failure(self, monkeypatch):
         """Test that cleanup is called even on failure."""
         monkeypatch.setattr(
-            SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
+            SparkSessionManager,
+            "get_session",
+            lambda app_name, enable_s3: _DummySpark(),
         )
 
         job = _SuccessfulJob("test_cleanup_on_fail")

@@ -2,7 +2,6 @@
 Tests for ZoneLookupIngestionJob to improve coverage.
 """
 
-
 from etl.jobs.bronze.zone_lookup_ingestion_job import (
     ZoneLookupIngestionJob,
     ReferenceDataError,

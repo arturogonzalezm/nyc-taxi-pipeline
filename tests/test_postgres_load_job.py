@@ -73,7 +73,7 @@ class TestPostgresLoadJobInit:
     def test_init_uses_env_vars_for_postgres_url(self):
         """Test that PostgreSQL URL defaults to environment variable."""
         with patch.dict(
-                os.environ, {"POSTGRES_URL": "jdbc:postgresql://env-host:5432/env_db"}
+            os.environ, {"POSTGRES_URL": "jdbc:postgresql://env-host:5432/env_db"}
         ):
             JobConfig.reset()
             job = PostgresLoadJob("yellow")
@@ -82,8 +82,8 @@ class TestPostgresLoadJobInit:
     def test_init_uses_env_vars_for_credentials(self):
         """Test that credentials default to environment variables."""
         with patch.dict(
-                os.environ,
-                {"POSTGRES_USER": "env_user", "POSTGRES_PASSWORD": "env_pass"},
+            os.environ,
+            {"POSTGRES_USER": "env_user", "POSTGRES_PASSWORD": "env_pass"},
         ):
             JobConfig.reset()
             job = PostgresLoadJob("yellow")
