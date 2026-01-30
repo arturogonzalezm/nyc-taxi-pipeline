@@ -354,7 +354,7 @@ class PostgresLoadJob(BaseSparkJob):
                 "fact_hash column not found - cannot perform idempotent load"
             )
 
-        self.logger.info(f"Loading fact_trip using hash-based upsert (idempotent)...")
+        self.logger.info("Loading fact_trip using hash-based upsert (idempotent)...")
         self.logger.info(f"Records to upsert: {record_count:,}")
 
         try:
@@ -387,7 +387,6 @@ class PostgresLoadJob(BaseSparkJob):
         :params target_table: Target table name (e.g., "taxi.fact_trip")
         """
         import psycopg2
-        from psycopg2 import sql
 
         temp_table = f"{target_table}_temp"
         self.logger.info(f"Creating temporary table: {temp_table}")
@@ -452,7 +451,7 @@ class PostgresLoadJob(BaseSparkJob):
 
             if is_initial_load:
                 self.logger.info(
-                    f"Target table is empty - using BULK INSERT optimization"
+                    "Target table is empty - using BULK INSERT optimization"
                 )
 
                 # OPTIMIZATION: Drop ALL indexes including PK and unique constraint
@@ -460,7 +459,7 @@ class PostgresLoadJob(BaseSparkJob):
                 self.logger.info("Checking for indexes to optimize bulk insert...")
 
                 # Get ALL indexes (including PK and unique constraint)
-                cursor.execute(f"""
+                cursor.execute("""
                     SELECT indexname, indexdef
                     FROM pg_indexes
                     WHERE schemaname = 'taxi'
@@ -582,9 +581,6 @@ class PostgresLoadJob(BaseSparkJob):
                     )
 
                     # First recreate PK and unique constraint (most important)
-                    pk_created = False
-                    unique_created = False
-
                     for idx_name, idx_def in list(index_definitions.items()):
                         if "fact_trip_pkey" in idx_name:
                             self.logger.info("  Creating PRIMARY KEY constraint...")
@@ -592,7 +588,6 @@ class PostgresLoadJob(BaseSparkJob):
                                 f"ALTER TABLE {target_table} ADD CONSTRAINT fact_trip_pkey PRIMARY KEY (trip_key)"
                             )
                             conn.commit()
-                            pk_created = True
                             self.logger.info("  ✓ PRIMARY KEY created")
                             del index_definitions[idx_name]  # Remove from dict
                         elif "uq_fact_trip_hash" in idx_name:
@@ -603,7 +598,6 @@ class PostgresLoadJob(BaseSparkJob):
                                 f"ALTER TABLE {target_table} ADD CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)"
                             )
                             conn.commit()
-                            unique_created = True
                             self.logger.info("  ✓ UNIQUE constraint created")
                             del index_definitions[idx_name]  # Remove from dict
 

@@ -143,9 +143,9 @@ class BaseSparkJob(ABC):
         self._metrics["status"] = "FAILED"  # Pessimistic default
 
         try:
-            self.logger.info(f"=" * 80)
+            self.logger.info("=" * 80)
             self.logger.info(f"Starting job: {self.job_name}")
-            self.logger.info(f"=" * 80)
+            self.logger.info("=" * 80)
 
             # Initialise Spark session
             with self._track_metrics("initialisation"):
@@ -175,11 +175,11 @@ class BaseSparkJob(ABC):
             total_duration = time.time() - self._start_time
             self._metrics["total_duration_seconds"] = round(total_duration, 2)
 
-            self.logger.info(f"=" * 80)
+            self.logger.info("=" * 80)
             self.logger.info(f"Job completed successfully: {self.job_name}")
             self.logger.info(f"Total duration: {total_duration:.2f} seconds")
             self.logger.info(f"Metrics: {self._metrics}")
-            self.logger.info(f"=" * 80)
+            self.logger.info("=" * 80)
 
             return True
 
@@ -187,11 +187,11 @@ class BaseSparkJob(ABC):
             self._metrics["error_message"] = str(e)
             self._metrics["error_type"] = type(e).__name__
 
-            self.logger.error(f"=" * 80)
+            self.logger.error("=" * 80)
             self.logger.error(f"Job failed: {self.job_name}")
             self.logger.error(f"Error: {str(e)}")
             self.logger.error(f"Metrics: {self._metrics}")
-            self.logger.error(f"=" * 80)
+            self.logger.error("=" * 80)
 
             # Re-raise as JobExecutionError for consistent error handling
             if isinstance(e, JobExecutionError):

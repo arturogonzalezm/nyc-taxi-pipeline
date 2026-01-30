@@ -268,7 +268,7 @@ class TaxiIngestionJob(BaseSparkJob):
             return self.spark.read.parquet(s3_cache_path)
         except S3Error:
             # File doesn't exist in cache - proceed with download
-            self.logger.info(f"Cache miss - will download from NYC TLC")
+            self.logger.info("Cache miss - will download from NYC TLC")
 
         # Download to temporary local file
         self.logger.info(f"Downloading from: {url}")
@@ -543,11 +543,11 @@ def run_bulk_ingestion(
         month = current_date.month
         total_months += 1
 
-        logger.info(f"=" * 80)
+        logger.info("=" * 80)
         logger.info(
             f"Processing {taxi_type} taxi data for {year}-{month:02d} ({total_months}/{(end_date.year - start_year) * 12 + end_date.month - start_month + 1})"
         )
-        logger.info(f"=" * 80)
+        logger.info("=" * 80)
 
         try:
             success = run_ingestion(taxi_type, year, month)
@@ -591,12 +591,12 @@ def run_bulk_ingestion(
         # Move to next month
         current_date += relativedelta(months=1)
 
-    logger.info(f"\n" + "=" * 80)
+    logger.info("\n" + "=" * 80)
     logger.info(
         f"Bulk ingestion complete: {successful}/{total_months} successful, {failed} failed/skipped"
     )
     logger.info(f"Success rate: {100 * successful / total_months:.1f}%")
-    logger.info(f"=" * 80)
+    logger.info("=" * 80)
 
     return results
 

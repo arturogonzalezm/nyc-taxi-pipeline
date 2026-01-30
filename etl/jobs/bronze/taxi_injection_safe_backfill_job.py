@@ -141,9 +141,9 @@ def safe_backfill_month(
         "error": None,
     }
 
-    logger.info(f"\n{'='*80}")
+    logger.info("\n" + "=" * 80)
     logger.info(f"Processing {taxi_type} taxi - {period}")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
 
     # Check existing partition
     exists, total_before, unique_before = check_partition_exists(
@@ -155,7 +155,7 @@ def safe_backfill_month(
         result["records_before"] = total_before
         result["duplicates_before"] = duplicates_before
 
-        logger.info(f"📊 Existing partition found:")
+        logger.info("📊 Existing partition found:")
         logger.info(f"   Total records:  {total_before:,}")
         logger.info(f"   Unique records: {unique_before:,}")
         logger.info(f"   Duplicates:     {duplicates_before:,}")
@@ -166,23 +166,23 @@ def safe_backfill_month(
             )
 
         if delete_existing:
-            logger.info(f"🗑️  Deleting existing partition...")
+            logger.info("🗑️  Deleting existing partition...")
             if delete_partition(spark, taxi_type, year, month):
-                logger.info(f"✅ Partition deleted")
+                logger.info("✅ Partition deleted")
             else:
-                logger.error(f"❌ Failed to delete partition")
+                logger.error("❌ Failed to delete partition")
                 result["status"] = "ERROR"
                 result["error"] = "Failed to delete existing partition"
                 return result
         else:
-            logger.info(f"⏭️  Skipping (delete_existing=False)")
+            logger.info("⏭️  Skipping (delete_existing=False)")
             result["status"] = "SKIPPED"
             return result
     else:
-        logger.info(f"ℹ️  No existing partition (first run)")
+        logger.info("ℹ️  No existing partition (first run)")
 
     # Run bronze
-    logger.info(f"🚀 Starting bronze...")
+    logger.info("🚀 Starting bronze...")
 
     try:
         job = TaxiIngestionJob(taxi_type, year, month)
@@ -195,7 +195,7 @@ def safe_backfill_month(
             )
 
             if not exists_after:
-                logger.error(f"❌ Partition not found after bronze!")
+                logger.error("❌ Partition not found after bronze!")
                 result["status"] = "FAILED"
                 result["error"] = "Partition not found after bronze"
                 return result
@@ -204,7 +204,7 @@ def safe_backfill_month(
             result["records_after"] = total_after
             result["duplicates_after"] = duplicates_after
 
-            logger.info(f"✅ Ingestion successful:")
+            logger.info("✅ Ingestion successful:")
             logger.info(f"   Total records:  {total_after:,}")
             logger.info(f"   Unique records: {unique_after:,}")
             logger.info(f"   Duplicates:     {duplicates_after:,}")
@@ -214,7 +214,7 @@ def safe_backfill_month(
                     f"⚠️  Found {duplicates_after:,} duplicates after bronze!"
                 )
                 logger.warning(
-                    f"    This suggests multiple runs - consider investigating"
+                    "    This suggests multiple runs - consider investigating"
                 )
 
             # Compare with before
@@ -227,7 +227,7 @@ def safe_backfill_month(
 
             # Get metrics
             metrics = job.get_metrics()
-            logger.info(f"⏱️  Execution time:")
+            logger.info("⏱️  Execution time:")
             logger.info(
                 f"   Extract:   {metrics.get('extract_duration_seconds', 0):.2f}s"
             )
@@ -242,7 +242,7 @@ def safe_backfill_month(
             result["status"] = "SUCCESS"
 
         else:
-            logger.error(f"❌ Ingestion failed")
+            logger.error("❌ Ingestion failed")
             result["status"] = "FAILED"
             result["error"] = "Job execution returned False"
 
@@ -266,9 +266,9 @@ def safe_historical_backfill(
     """
     from etl.jobs.utils.spark_manager import SparkSessionManager
 
-    logger.info(f"\n{'#'*80}")
-    logger.info(f"SAFE HISTORICAL BACKFILL")
-    logger.info(f"{'#'*80}")
+    logger.info("\n" + "#" * 80)
+    logger.info("SAFE HISTORICAL BACKFILL")
+    logger.info("#" * 80)
     logger.info(f"Taxi type:       {taxi_type}")
     logger.info(f"Months to process: {len(months)}")
     logger.info(f"Delete existing: {delete_existing}")
@@ -284,9 +284,9 @@ def safe_historical_backfill(
         results[result["period"]] = result
 
     # Summary
-    logger.info(f"\n{'#'*80}")
-    logger.info(f"BACKFILL SUMMARY")
-    logger.info(f"{'#'*80}")
+    logger.info("\n" + "#" * 80)
+    logger.info("BACKFILL SUMMARY")
+    logger.info("#" * 80)
 
     successful = sum(1 for r in results.values() if r["status"] == "SUCCESS")
     failed = sum(1 for r in results.values() if r["status"] in ["FAILED", "ERROR"])
@@ -332,7 +332,7 @@ def safe_historical_backfill(
     )
     if total_duplicates > 0:
         logger.warning(f"\n⚠️  TOTAL DUPLICATES FOUND: {total_duplicates:,}")
-        logger.warning(f"   Recommend investigating duplicate sources")
+        logger.warning("   Recommend investigating duplicate sources")
 
     return results
 
@@ -350,13 +350,13 @@ def main():
         Examples:
           # Backfill specific months
           python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2023-03 2023-07 2023-11
-        
+
           # Backfill a range
           python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2023-01:2023-12
-        
+
           # Skip deletion (keep existing, only process missing)
           python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2024-01 2024-02 --no-delete
-        
+
           # Multiple ranges
           python etl/jobs/bronze/taxi_injection_safe_backfill_job.py green 2023-01:2023-06 2023-11:2023-12
                 """,

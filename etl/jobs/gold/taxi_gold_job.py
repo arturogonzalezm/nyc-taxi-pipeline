@@ -257,7 +257,7 @@ class TaxiGoldJob(BaseSparkJob):
 
                 # Force evaluation to catch corrupted files before adding to list
                 # Use take(1) which is faster than count() for validation
-                self.logger.info(f"Validating partition data...")
+                self.logger.info("Validating partition data...")
                 sample = df_partition.take(1)
 
                 if not sample:
@@ -561,7 +561,7 @@ class TaxiGoldJob(BaseSparkJob):
 
         # Log quality metrics
         total_invalid = df_with_flags.filter(~F.col("is_valid_record")).count()
-        self.logger.info(f"Data quality summary:")
+        self.logger.info("Data quality summary:")
         self.logger.info(f"  Initial records: {initial_count:,}")
         self.logger.info(
             f"  Invalid records: {total_invalid:,} ({100 * total_invalid / initial_count:.2f}%)"
