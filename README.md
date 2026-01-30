@@ -262,45 +262,7 @@ nyc-taxi-pipeline/
 
 The gold layer produces a star schema with the following tables:
 
-![alt text](https://github.com/arturogonzalezm/nyc-taxi-pipeline/blob/main/docs/images/diagram.png?raw=true)
-
-
-```
-                    +---------------+
-                    |   dim_date    |
-                    +---------------+
-                    | date_key (PK) |
-                    | date          |
-                    | year          |
-                    | month         |
-                    | day_of_week   |
-                    | is_weekend    |
-                    +-------+-------+
-                            |
-+---------------+           |           +---------------+
-| dim_location  |           |           |  dim_payment  |
-+---------------+           |           +---------------+
-| location_key  |           |           | payment_key   |
-| borough       |           |           | payment_type  |
-| zone          |           |           | payment_desc  |
-| service_zone  |           |           +-------+-------+
-+-------+-------+           |                   |
-        |                   |                   |
-        |           +-------+-------+           |
-        +---------->|   fact_trip   |<----------+
-                    +---------------+
-                    | trip_key (PK) |
-                    | date_key (FK) |
-                    | pickup_location_key (FK)  |
-                    | dropoff_location_key (FK) |
-                    | payment_key (FK)          |
-                    | passenger_count           |
-                    | trip_distance             |
-                    | fare_amount               |
-                    | total_amount              |
-                    | fact_hash (unique)        |
-                    +---------------+
-```
+![alt text](https://github.com/arturogonzalezm/nyc-taxi-pipeline/blob/main/docs/images/erd.png?raw=true)
 
 ### Idempotent Loading
 
