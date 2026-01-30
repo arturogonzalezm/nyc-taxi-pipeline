@@ -2,11 +2,63 @@
 Tests for ZoneLookupIngestionJob to improve coverage.
 """
 
+import pytest
+from unittest.mock import patch
+
 from etl.jobs.bronze.zone_lookup_ingestion_job import (
     ZoneLookupIngestionJob,
     ReferenceDataError,
 )
 from etl.jobs.base_job import JobExecutionError
+from etl.jobs.utils.config import JobConfig
+
+
+class TestZoneLookupIngestionJobInit:
+    """Tests for ZoneLookupIngestionJob initialization."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_init_creates_job(self):
+        """Test that job can be initialized."""
+        job = ZoneLookupIngestionJob()
+        assert job is not None
+
+    def test_init_sets_file_name(self):
+        """Test that file_name is set from constant."""
+        job = ZoneLookupIngestionJob()
+        assert job.file_name == ZoneLookupIngestionJob.FILE_NAME
+
+    def test_init_sets_source_url(self):
+        """Test that source_url is set from constant."""
+        job = ZoneLookupIngestionJob()
+        assert job.source_url == ZoneLookupIngestionJob.SOURCE_URL
+
+    def test_init_job_name(self):
+        """Test that job name is set correctly."""
+        job = ZoneLookupIngestionJob()
+        assert job.job_name == "ZoneLookupIngestion"
+
+    def test_init_with_custom_config(self):
+        """Test initialization with custom config."""
+        config = JobConfig()
+        job = ZoneLookupIngestionJob(config=config)
+        assert job.config is config
+
+
+class TestZoneLookupIngestionJobValidateInputs:
+    """Tests for ZoneLookupIngestionJob.validate_inputs method."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_validate_inputs_does_not_raise(self):
+        """Test that validate_inputs does not raise for valid job."""
+        job = ZoneLookupIngestionJob()
+        # Should not raise
+        job.validate_inputs()
 
 
 class TestZoneLookupIngestionJobConstants:

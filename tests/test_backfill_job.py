@@ -2,7 +2,13 @@
 Tests for taxi_injection_safe_backfill_job to improve coverage.
 """
 
-from etl.jobs.bronze.taxi_injection_safe_backfill_job import parse_month_spec
+import pytest
+from unittest.mock import patch, MagicMock
+
+from etl.jobs.bronze.taxi_injection_safe_backfill_job import (
+    parse_month_spec,
+    safe_historical_backfill,
+)
 
 
 class TestParseMonthSpec:
@@ -66,3 +72,98 @@ class TestParseMonthSpec:
             next_year, next_month = result[i + 1]
             # Next should be greater
             assert (next_year, next_month) > (current_year, current_month)
+
+
+class TestSafeHistoricalBackfill:
+    """Tests for safe_historical_backfill function."""
+
+    def test_safe_historical_backfill_returns_dict(self):
+        """Test that safe_historical_backfill returns a dictionary."""
+        with patch(
+            "etl.jobs.utils.spark_manager.SparkSessionManager"
+        ) as mock_spark_manager:
+            mock_spark = MagicMock()
+            mock_spark_manager.get_session.return_value = mock_spark
+
+            with patch(
+                "etl.jobs.bronze.taxi_injection_safe_backfill_job.safe_backfill_month"
+            ) as mock_backfill:
+                mock_backfill.return_value = {
+                    "period": "2024-01",
+                    "status": "SUCCESS",
+                    "records_before": 0,
+                    "records_after": 1000,
+                    "duplicates_before": 0,
+                    "duplicates_after": 0,
+                    "error": None,
+                }
+
+                result = safe_historical_backfill("yellow", [(2024, 1)])
+
+                assert isinstance(result, dict)
+                assert "2024-01" in result
+
+    def test_safe_historical_backfill_processes_multiple_months(self):
+        """Test that safe_historical_backfill processes multiple months."""
+        with patch(
+            "etl.jobs.utils.spark_manager.SparkSessionManager"
+        ) as mock_spark_manager:
+            mock_spark = MagicMock()
+            mock_spark_manager.get_session.return_value = mock_spark
+
+            with patch(
+                "etl.jobs.bronze.taxi_injection_safe_backfill_job.safe_backfill_month"
+            ) as mock_backfill:
+                mock_backfill.side_effect = [
+                    {
+                        "period": "2024-01",
+                        "status": "SUCCESS",
+                        "records_before": 0,
+                        "records_after": 1000,
+                        "duplicates_before": 0,
+                        "duplicates_after": 0,
+                        "error": None,
+                    },
+                    {
+                        "period": "2024-02",
+                        "status": "SUCCESS",
+                        "records_before": 0,
+                        "records_after": 1200,
+                        "duplicates_before": 0,
+                        "duplicates_after": 0,
+                        "error": None,
+                    },
+                ]
+
+                result = safe_historical_backfill("yellow", [(2024, 1), (2024, 2)])
+
+                assert len(result) == 2
+                assert "2024-01" in result
+                assert "2024-02" in result
+
+    def test_safe_historical_backfill_with_delete_existing_false(self):
+        """Test safe_historical_backfill with delete_existing=False."""
+        with patch(
+            "etl.jobs.utils.spark_manager.SparkSessionManager"
+        ) as mock_spark_manager:
+            mock_spark = MagicMock()
+            mock_spark_manager.get_session.return_value = mock_spark
+
+            with patch(
+                "etl.jobs.bronze.taxi_injection_safe_backfill_job.safe_backfill_month"
+            ) as mock_backfill:
+                mock_backfill.return_value = {
+                    "period": "2024-01",
+                    "status": "SKIPPED",
+                    "records_before": 1000,
+                    "records_after": 0,
+                    "duplicates_before": 0,
+                    "duplicates_after": 0,
+                    "error": None,
+                }
+
+                result = safe_historical_backfill(
+                    "green", [(2024, 1)], delete_existing=False
+                )
+
+                assert result["2024-01"]["status"] == "SKIPPED"
