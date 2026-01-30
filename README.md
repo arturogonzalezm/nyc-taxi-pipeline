@@ -49,9 +49,9 @@ sequenceDiagram
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - Docker Desktop (for MinIO and PostgreSQL)
-- Java 11+ (for PySpark)
+- Java 17+ (for PySpark)
 
 ## Quick Start
 
