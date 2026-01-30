@@ -39,7 +39,6 @@ from minio.error import S3Error
 from ..base_job import BaseSparkJob, JobExecutionError
 from ..utils.config import JobConfig
 
-
 logger = logging.getLogger(__name__)
 
 

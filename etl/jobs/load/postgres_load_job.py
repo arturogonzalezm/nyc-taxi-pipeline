@@ -460,14 +460,12 @@ class PostgresLoadJob(BaseSparkJob):
                 self.logger.info("Checking for indexes to optimize bulk insert...")
 
                 # Get ALL indexes (including PK and unique constraint)
-                cursor.execute(
-                    f"""
+                cursor.execute(f"""
                     SELECT indexname, indexdef
                     FROM pg_indexes
                     WHERE schemaname = 'taxi'
                       AND tablename = 'fact_trip'
-                """
-                )
+                """)
                 existing_indexes = cursor.fetchall()
 
                 if existing_indexes:
@@ -477,12 +475,10 @@ class PostgresLoadJob(BaseSparkJob):
 
                     # First, drop FK constraints that reference this table's PK
                     self.logger.info("Temporarily dropping FK constraints...")
-                    cursor.execute(
-                        f"""
+                    cursor.execute(f"""
                         ALTER TABLE {target_table} DROP CONSTRAINT IF EXISTS uq_fact_trip_hash,
                         DROP CONSTRAINT IF EXISTS fact_trip_pkey CASCADE
-                    """
-                    )
+                    """)
                     conn.commit()
 
                     # Store index definitions for recreation
@@ -634,15 +630,13 @@ class PostgresLoadJob(BaseSparkJob):
 
                 # Validate FK constraints after re-enabling
                 self.logger.info("Validating foreign key constraints...")
-                cursor.execute(
-                    f"""
+                cursor.execute(f"""
                     SELECT COUNT(*) FROM {target_table}
                     WHERE date_key NOT IN (SELECT date_key FROM taxi.dim_date)
                        OR pickup_location_key NOT IN (SELECT location_key FROM taxi.dim_location)
                        OR dropoff_location_key NOT IN (SELECT location_key FROM taxi.dim_location)
                        OR payment_key NOT IN (SELECT payment_key FROM taxi.dim_payment)
-                """
-                )
+                """)
                 invalid_fk_count = cursor.fetchone()[0]
                 if invalid_fk_count > 0:
                     self.logger.warning(
