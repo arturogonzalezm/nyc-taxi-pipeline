@@ -28,17 +28,24 @@ Design Patterns:
     - Strategy: Configurable extract (MinIO cache vs source)
     - Factory: Convenience functions for job creation
 """
-import os
+import sys
 import requests
 import logging
 from pathlib import Path
 from typing import Literal, Optional
+
+# Add project root to path for imports when running as script
+if __name__ == "__main__" or "etl.jobs" not in sys.modules:
+    project_root = Path(__file__).resolve().parents[3]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
 from pyspark.sql import DataFrame
 from minio import Minio
 from minio.error import S3Error
 
-from ..base_job import BaseSparkJob, JobExecutionError
-from ..utils.config import JobConfig
+from etl.jobs.base_job import BaseSparkJob, JobExecutionError
+from etl.jobs.utils.config import JobConfig
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +53,7 @@ logger = logging.getLogger(__name__)
 class DataValidationError(JobExecutionError):
     """
     Raised when data validation fails during bronze
+
     :raises DataValidationError: If data does not match requested year/month or fails schema validation
     """
     pass
@@ -54,6 +62,7 @@ class DataValidationError(JobExecutionError):
 class DownloadError(JobExecutionError):
     """
     Raised when data download from NYC TLC fails
+
     :raises DownloadError: If download fails or HTTP error occurs
     """
     pass
@@ -110,6 +119,7 @@ class TaxiIngestionJob(BaseSparkJob):
     ):
         """
         Initialise the taxi data bronze job.
+
         :params taxi_type: Type of taxi data to ingest (yellow or green)
         :params year: Year of the data (2009 or later)
         :params month: Month of the data (1-12)
@@ -136,6 +146,7 @@ class TaxiIngestionJob(BaseSparkJob):
     ) -> None:
         """
         Validate job parameters before initialization.
+
         :params taxi_type: Type of taxi (yellow or green)
         :params year: Year of data
         :params month: Month of data
@@ -219,6 +230,7 @@ class TaxiIngestionJob(BaseSparkJob):
     def _get_minio_client(self) -> Minio:
         """
         Create and return configured MinIO client.
+
         :returns: Initialised Minio client
         :raises JobExecutionError: If MinIO client creation fails
         """
@@ -237,6 +249,7 @@ class TaxiIngestionJob(BaseSparkJob):
     def _extract_with_minio_cache(self, url: str) -> DataFrame:
         """
         Extract data using MinIO cache-first strategy.
+
         :params url: Source URL for downloading data
         :returns DataFrame loaded from MinIO cache or freshly downloaded
         :raises DownloadError: If download fails
@@ -304,6 +317,7 @@ class TaxiIngestionJob(BaseSparkJob):
     def _extract_with_local_cache(self, url: str) -> DataFrame:
         """
         Extract data using local file cache.
+
         :params url: Source URL for downloading data
         :returns: DataFrame loaded from local cache or freshly downloaded
         :raises DownloadError: If download fails
@@ -330,6 +344,7 @@ class TaxiIngestionJob(BaseSparkJob):
     def _download_file(self, url: str, destination: Path) -> None:
         """
         Download file from URL to destination path.
+
         :params url: Source URL to download from
         :params destination: Local path to save file
         :raises DownloadError: If download fails or HTTP error occurs
@@ -436,6 +451,7 @@ def run_ingestion(
 ) -> bool:
     """
     Convenience function to run the bronze job for a single month.
+
     :param taxi_type: Type of taxi (yellow or green)
     :param year: Year of the data
     :param month: Month of the data
@@ -454,6 +470,7 @@ def run_bulk_ingestion(
 ) -> dict:
     """
     Run bronze for multiple months (historical data bronze).
+
     :param taxi_type: Type of taxi (yellow or green)
     :param start_year: Starting year
     :param start_month: Starting month (1-12)
