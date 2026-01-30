@@ -10,6 +10,7 @@ Design Patterns:
     - Strategy: Allows different extraction, gold, and loading strategies
     - Singleton: Uses singleton SparkSession and configuration
 """
+
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pyspark.sql import SparkSession, DataFrame
@@ -26,6 +27,7 @@ class JobExecutionError(Exception):
     """
     Custom exception for job execution failures
     """
+
     pass
 
 
@@ -97,8 +99,8 @@ class BaseSparkJob(ABC):
         if not logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
             )
             handler.setFormatter(formatter)
             logger.addHandler(handler)
@@ -136,9 +138,9 @@ class BaseSparkJob(ABC):
         :raises JobExecutionError: If any step fails with context about the failure
         """
         self._start_time = time.time()
-        self._metrics['job_name'] = self.job_name
-        self._metrics['start_time'] = datetime.now().isoformat()
-        self._metrics['status'] = 'FAILED'  # Pessimistic default
+        self._metrics["job_name"] = self.job_name
+        self._metrics["start_time"] = datetime.now().isoformat()
+        self._metrics["status"] = "FAILED"  # Pessimistic default
 
         try:
             self.logger.info(f"=" * 80)
@@ -146,33 +148,32 @@ class BaseSparkJob(ABC):
             self.logger.info(f"=" * 80)
 
             # Initialise Spark session
-            with self._track_metrics('initialisation'):
+            with self._track_metrics("initialisation"):
                 self.spark = SparkSessionManager.get_session(
-                    app_name=self.job_name,
-                    enable_s3=self.config.minio.use_minio
+                    app_name=self.job_name, enable_s3=self.config.minio.use_minio
                 )
 
             # Execute ETL pipeline
-            with self._track_metrics('validation'):
+            with self._track_metrics("validation"):
                 self.validate_inputs()
 
-            with self._track_metrics('extract'):
+            with self._track_metrics("extract"):
                 data = self.extract()
                 if data is None:
                     raise JobExecutionError("Extract step returned None")
 
-            with self._track_metrics('transform'):
+            with self._track_metrics("transform"):
                 transformed_data = self.transform(data)
                 if transformed_data is None:
                     raise JobExecutionError("Transform step returned None")
 
-            with self._track_metrics('load'):
+            with self._track_metrics("load"):
                 self.load(transformed_data)
 
             # Job succeeded
-            self._metrics['status'] = 'SUCCESS'
+            self._metrics["status"] = "SUCCESS"
             total_duration = time.time() - self._start_time
-            self._metrics['total_duration_seconds'] = round(total_duration, 2)
+            self._metrics["total_duration_seconds"] = round(total_duration, 2)
 
             self.logger.info(f"=" * 80)
             self.logger.info(f"Job completed successfully: {self.job_name}")
@@ -183,8 +184,8 @@ class BaseSparkJob(ABC):
             return True
 
         except Exception as e:
-            self._metrics['error_message'] = str(e)
-            self._metrics['error_type'] = type(e).__name__
+            self._metrics["error_message"] = str(e)
+            self._metrics["error_type"] = type(e).__name__
 
             self.logger.error(f"=" * 80)
             self.logger.error(f"Job failed: {self.job_name}")

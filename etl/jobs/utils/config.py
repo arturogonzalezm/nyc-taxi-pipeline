@@ -2,6 +2,7 @@
 Configuration Management
 Centralized configuration for PySpark jobs using Singleton pattern.
 """
+
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -17,14 +18,25 @@ class MinIOConfig:
     All configuration values are loaded from environment variables with sensible defaults.
     This follows the 12-factor app methodology for configuration management.
     """
-    endpoint: str = field(default_factory=lambda: os.getenv("MINIO_ENDPOINT", "localhost:9000"))
-    access_key: str = field(default_factory=lambda: os.getenv("MINIO_ACCESS_KEY", "minioadmin"))
-    secret_key: str = field(default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin"))
-    bucket: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET", "nyc-taxi-pipeline"))
+
+    endpoint: str = field(
+        default_factory=lambda: os.getenv("MINIO_ENDPOINT", "localhost:9000")
+    )
+    access_key: str = field(
+        default_factory=lambda: os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    )
+    secret_key: str = field(
+        default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    )
+    bucket: str = field(
+        default_factory=lambda: os.getenv("MINIO_BUCKET", "nyc-taxi-pipeline")
+    )
     bronze_path: str = "bronze/nyc_taxi"
     silver_path: str = "silver/nyc_taxi"
     gold_path: str = "gold/nyc_taxi"
-    use_minio: bool = field(default_factory=lambda: os.getenv("USE_MINIO", "true").lower() == "true")
+    use_minio: bool = field(
+        default_factory=lambda: os.getenv("USE_MINIO", "true").lower() == "true"
+    )
 
     def __post_init__(self):
         """Validate configuration after initialization"""
@@ -50,7 +62,7 @@ class JobConfig:
     5. Immutable configuration after creation
     """
 
-    _instance: Optional['JobConfig'] = None
+    _instance: Optional["JobConfig"] = None
     _initialized: bool = False
 
     def __new__(cls):
@@ -98,7 +110,7 @@ class JobConfig:
     def get_s3_path(
         self,
         layer: Literal["bronze", "silver", "gold"],
-        taxi_type: Optional[str] = None
+        taxi_type: Optional[str] = None,
     ) -> str:
         """
         Get S3 path for given layer and taxi type.
@@ -123,7 +135,9 @@ class JobConfig:
         try:
             layer_path = getattr(self._minio, f"{layer}_path")
         except AttributeError:
-            raise ValueError(f"Invalid layer: {layer}. Must be one of: bronze, silver, gold")
+            raise ValueError(
+                f"Invalid layer: {layer}. Must be one of: bronze, silver, gold"
+            )
 
         base_path = f"s3a://{self._minio.bucket}/{layer_path}"
 

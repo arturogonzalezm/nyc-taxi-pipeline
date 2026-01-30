@@ -19,6 +19,7 @@ Hadoop 3.4.2 Workaround:
 Thread Safety:
     Uses class-level singleton with thread-safe getOrCreate() from PySpark
 """
+
 import os
 import logging
 from pathlib import Path
@@ -34,6 +35,7 @@ class SparkSessionError(Exception):
 
     :raises SparkSessionError: Thrown when SparkSession creation fails or configuration is invalid
     """
+
     pass
 
 
@@ -41,7 +43,7 @@ class SparkSessionError(Exception):
 # This is the first layer of our Hadoop 3.4.2 timeout configuration fix
 try:
     _project_root = Path(__file__).parent.parent.parent.parent
-    _hadoop_conf_dir = _project_root / '.hadoop-conf'
+    _hadoop_conf_dir = _project_root / ".hadoop-conf"
 
     if not _hadoop_conf_dir.exists():
         raise SparkSessionError(
@@ -49,7 +51,7 @@ try:
             "Expected .hadoop-conf/ in project root with core-site.xml"
         )
 
-    os.environ['HADOOP_CONF_DIR'] = str(_hadoop_conf_dir)
+    os.environ["HADOOP_CONF_DIR"] = str(_hadoop_conf_dir)
     logger.info(f"Set HADOOP_CONF_DIR to {_hadoop_conf_dir}")
 except Exception as e:
     raise SparkSessionError(f"Failed to configure Hadoop directory: {e}") from e
@@ -96,24 +98,26 @@ class SparkSessionManager:
         :raises SparkSessionError: If required environment variables are missing or invalid
         """
         config = {
-            'endpoint': os.getenv("MINIO_ENDPOINT", "localhost:9000"),
-            'access_key': os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-            'secret_key': os.getenv("MINIO_SECRET_KEY", "minioadmin")
+            "endpoint": os.getenv("MINIO_ENDPOINT", "localhost:9000"),
+            "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+            "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
         }
 
         # Validate endpoint format
-        if not config['endpoint']:
+        if not config["endpoint"]:
             raise SparkSessionError("MINIO_ENDPOINT cannot be empty")
 
-        if config['endpoint'].startswith(('http://', 'https://')):
+        if config["endpoint"].startswith(("http://", "https://")):
             logger.warning(
                 f"MINIO_ENDPOINT should not include protocol. "
                 f"Got: {config['endpoint']}. Stripping protocol."
             )
-            config['endpoint'] = config['endpoint'].replace('http://', '').replace('https://', '')
+            config["endpoint"] = (
+                config["endpoint"].replace("http://", "").replace("https://", "")
+            )
 
         # Validate credentials
-        if not config['access_key'] or not config['secret_key']:
+        if not config["access_key"] or not config["secret_key"]:
             raise SparkSessionError("MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set")
 
         logger.info(f"MinIO configuration validated: endpoint={config['endpoint']}")
@@ -121,9 +125,7 @@ class SparkSessionManager:
 
     @classmethod
     def get_session(
-            cls,
-            app_name: str = "NYC Taxi Data Pipeline",
-            enable_s3: bool = True
+        cls, app_name: str = "NYC Taxi Data Pipeline", enable_s3: bool = True
     ) -> SparkSession:
         """
         Get or create Spark session with optional S3/MinIO configuration.
@@ -164,16 +166,17 @@ class SparkSessionManager:
                 )
 
                 # Base Spark configuration with optimizations
-                builder = SparkSession.builder \
-                    .appName(app_name) \
-                    .master("local[*]") \
-                    .config("spark.driver.memory", "8g") \
-                    .config("spark.driver.maxResultSize", "2g") \
-                    .config("spark.sql.shuffle.partitions", "200") \
-                    .config("spark.default.parallelism", "8") \
-                    .config("spark.driver.extraJavaOptions", java_opts) \
-                    .config("spark.sql.adaptive.enabled", "true") \
+                builder = (
+                    SparkSession.builder.appName(app_name)
+                    .master("local[*]")
+                    .config("spark.driver.memory", "8g")
+                    .config("spark.driver.maxResultSize", "2g")
+                    .config("spark.sql.shuffle.partitions", "200")
+                    .config("spark.default.parallelism", "8")
+                    .config("spark.driver.extraJavaOptions", java_opts)
+                    .config("spark.sql.adaptive.enabled", "true")
                     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+                )
 
                 # Configure for MinIO/S3A access if enabled
                 if enable_s3:
@@ -181,26 +184,43 @@ class SparkSessionManager:
 
                     # S3A configuration for MinIO with explicit numeric timeout values
                     # These override any defaults that might use time unit strings
-                    builder = builder \
-                        .config("spark.hadoop.fs.s3a.endpoint", f"http://{minio_config['endpoint']}") \
-                        .config("spark.hadoop.fs.s3a.access.key", minio_config['access_key']) \
-                        .config("spark.hadoop.fs.s3a.secret.key", minio_config['secret_key']) \
-                        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-                        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-                        .config("spark.hadoop.fs.s3a.connection.timeout", "600000") \
-                        .config("spark.hadoop.fs.s3a.connection.establish.timeout", "60000") \
-                        .config("spark.hadoop.fs.s3a.connection.maximum", "100") \
-                        .config("spark.hadoop.fs.s3a.attempts.maximum", "5") \
-                        .config("spark.hadoop.fs.s3a.retry.interval", "1000") \
-                        .config("spark.hadoop.fs.s3a.retry.limit", "5") \
-                        .config("spark.hadoop.fs.s3a.socket.send.buffer", "65536") \
-                        .config("spark.hadoop.fs.s3a.socket.recv.buffer", "65536") \
-                        .config("spark.hadoop.parquet.hadoop.vectored.io.enabled", "false") \
-                        .config("spark.jars.packages",
-                                "org.apache.hadoop:hadoop-aws:3.4.2,"
-                                "com.amazonaws:aws-java-sdk-bundle:1.12.262,"
-                                "org.apache.hadoop:hadoop-common:3.4.2,"
-                                "org.postgresql:postgresql:42.7.1")
+                    builder = (
+                        builder.config(
+                            "spark.hadoop.fs.s3a.endpoint",
+                            f"http://{minio_config['endpoint']}",
+                        )
+                        .config(
+                            "spark.hadoop.fs.s3a.access.key", minio_config["access_key"]
+                        )
+                        .config(
+                            "spark.hadoop.fs.s3a.secret.key", minio_config["secret_key"]
+                        )
+                        .config("spark.hadoop.fs.s3a.path.style.access", "true")
+                        .config(
+                            "spark.hadoop.fs.s3a.impl",
+                            "org.apache.hadoop.fs.s3a.S3AFileSystem",
+                        )
+                        .config("spark.hadoop.fs.s3a.connection.timeout", "600000")
+                        .config(
+                            "spark.hadoop.fs.s3a.connection.establish.timeout", "60000"
+                        )
+                        .config("spark.hadoop.fs.s3a.connection.maximum", "100")
+                        .config("spark.hadoop.fs.s3a.attempts.maximum", "5")
+                        .config("spark.hadoop.fs.s3a.retry.interval", "1000")
+                        .config("spark.hadoop.fs.s3a.retry.limit", "5")
+                        .config("spark.hadoop.fs.s3a.socket.send.buffer", "65536")
+                        .config("spark.hadoop.fs.s3a.socket.recv.buffer", "65536")
+                        .config(
+                            "spark.hadoop.parquet.hadoop.vectored.io.enabled", "false"
+                        )
+                        .config(
+                            "spark.jars.packages",
+                            "org.apache.hadoop:hadoop-aws:3.4.2,"
+                            "com.amazonaws:aws-java-sdk-bundle:1.12.262,"
+                            "org.apache.hadoop:hadoop-common:3.4.2,"
+                            "org.postgresql:postgresql:42.7.1",
+                        )
+                    )
 
                 cls._instance = builder.getOrCreate()
                 logger.info("SparkSession created successfully")
@@ -213,9 +233,9 @@ class SparkSessionManager:
 
                 # Store configuration for diagnostics
                 cls._session_config = {
-                    'app_name': app_name,
-                    'enable_s3': enable_s3,
-                    'spark_version': cls._instance.version
+                    "app_name": app_name,
+                    "enable_s3": enable_s3,
+                    "spark_version": cls._instance.version,
                 }
 
             except Exception as e:
@@ -223,7 +243,9 @@ class SparkSessionManager:
                 cls._instance = None
                 raise SparkSessionError(f"SparkSession creation failed: {e}") from e
         else:
-            logger.info(f"Returning existing SparkSession (ignoring app_name: {app_name})")
+            logger.info(
+                f"Returning existing SparkSession (ignoring app_name: {app_name})"
+            )
 
         return cls._instance
 
@@ -259,13 +281,15 @@ class SparkSessionManager:
                 "fs.s3a.connection.maximum": "100",
                 "fs.s3a.socket.send.buffer": "65536",
                 "fs.s3a.socket.recv.buffer": "65536",
-                "parquet.hadoop.vectored.io.enabled": "false"
+                "parquet.hadoop.vectored.io.enabled": "false",
             }
 
             for key, value in timeout_configs.items():
                 hadoop_conf.set(key, value)
 
-            logger.info(f"Applied {len(timeout_configs)} Hadoop configuration overrides")
+            logger.info(
+                f"Applied {len(timeout_configs)} Hadoop configuration overrides"
+            )
 
             # Clear FileSystem cache to force re-initialization with new configuration
             # This ensures S3A filesystem picks up our numeric timeout values

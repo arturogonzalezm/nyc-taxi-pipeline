@@ -38,9 +38,7 @@ class _FailingExtractJob(BaseSparkJob):
 
 def test_base_job_run_success(monkeypatch):
     monkeypatch.setattr(
-        SparkSessionManager,
-        "get_session",
-        lambda app_name, enable_s3: _DummySpark()
+        SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
     )
 
     job = _DummyJob("dummy_job")
@@ -52,9 +50,7 @@ def test_base_job_run_success(monkeypatch):
 
 def test_base_job_run_extract_none(monkeypatch):
     monkeypatch.setattr(
-        SparkSessionManager,
-        "get_session",
-        lambda app_name, enable_s3: _DummySpark()
+        SparkSessionManager, "get_session", lambda app_name, enable_s3: _DummySpark()
     )
 
     job = _FailingExtractJob("failing_extract")

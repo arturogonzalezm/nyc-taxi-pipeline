@@ -21,6 +21,7 @@ Design Patterns:
     - Template Method: Inherits from BaseSparkJob
     - Batch Processing: Efficient bulk inserts via JDBC
 """
+
 import sys
 import os
 from pathlib import Path
@@ -77,14 +78,14 @@ class PostgresLoadJob(BaseSparkJob):
     """
 
     def __init__(
-            self,
-            taxi_type: Literal["yellow", "green"],
-            year: Optional[int] = None,
-            month: Optional[int] = None,
-            postgres_url: Optional[str] = None,
-            postgres_user: Optional[str] = None,
-            postgres_password: Optional[str] = None,
-            config: Optional[JobConfig] = None
+        self,
+        taxi_type: Literal["yellow", "green"],
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+        postgres_url: Optional[str] = None,
+        postgres_user: Optional[str] = None,
+        postgres_password: Optional[str] = None,
+        config: Optional[JobConfig] = None,
     ):
         """
         Initialise the PostgreSQL load job.
@@ -103,7 +104,7 @@ class PostgresLoadJob(BaseSparkJob):
 
         super().__init__(
             job_name=f"PostgresLoad_{taxi_type}_{year or 'all'}_{month or 'all'}",
-            config=config
+            config=config,
         )
 
         self.taxi_type = taxi_type
@@ -112,11 +113,12 @@ class PostgresLoadJob(BaseSparkJob):
 
         # PostgreSQL connection parameters
         self.postgres_url = postgres_url or os.getenv(
-            "POSTGRES_URL",
-            "jdbc:postgresql://localhost:5432/nyc_taxi"
+            "POSTGRES_URL", "jdbc:postgresql://localhost:5432/nyc_taxi"
         )
         self.postgres_user = postgres_user or os.getenv("POSTGRES_USER", "postgres")
-        self.postgres_password = postgres_password or os.getenv("POSTGRES_PASSWORD", "postgres")
+        self.postgres_password = postgres_password or os.getenv(
+            "POSTGRES_PASSWORD", "postgres"
+        )
 
         # JDBC connection properties for optimized loading
         self.postgres_properties = {
@@ -126,7 +128,7 @@ class PostgresLoadJob(BaseSparkJob):
             "batchsize": "50000",  # Larger batch size for better throughput (was 10000)
             "isolationLevel": "READ_COMMITTED",
             "stringtype": "unspecified",  # Better handling of VARCHAR types
-            "reWriteBatchedInserts": "true"  # PostgreSQL JDBC optimization for batch inserts
+            "reWriteBatchedInserts": "true",  # PostgreSQL JDBC optimization for batch inserts
         }
 
     def validate_inputs(self):
@@ -164,7 +166,7 @@ class PostgresLoadJob(BaseSparkJob):
         dimensional_model = {}
 
         # Read dimension tables (always load all dimensions)
-        for dim_name in ['dim_date', 'dim_location', 'dim_payment']:
+        for dim_name in ["dim_date", "dim_location", "dim_payment"]:
             dim_path = f"{gold_base_path}/{dim_name}"
             self.logger.info(f"Reading {dim_name} from {dim_path}")
 
@@ -191,7 +193,7 @@ class PostgresLoadJob(BaseSparkJob):
 
             fact_count = fact_df.count()
             self.logger.info(f"Loaded fact_trip: {fact_count:,} records")
-            dimensional_model['fact_trip'] = fact_df
+            dimensional_model["fact_trip"] = fact_df
 
         except Exception as e:
             raise JobExecutionError(f"Failed to read fact_trip: {e}") from e
@@ -214,9 +216,11 @@ class PostgresLoadJob(BaseSparkJob):
         enriched_model = {}
         for table_name, df in dimensional_model.items():
             # Add load timestamp metadata
-            df_with_metadata = df.withColumn("postgres_load_timestamp", F.current_timestamp()) \
-                .withColumn("postgres_load_date", F.current_date()) \
+            df_with_metadata = (
+                df.withColumn("postgres_load_timestamp", F.current_timestamp())
+                .withColumn("postgres_load_date", F.current_date())
                 .withColumn("load_job_name", F.lit(self.job_name))
+            )
 
             count = df_with_metadata.count()
             self.logger.info(f"{table_name}: {count:,} records ready for load")
@@ -245,9 +249,9 @@ class PostgresLoadJob(BaseSparkJob):
         # ALWAYS load dimensions first
         # Dimensions must exist before fact table (FK constraints)
         dimension_tables = {
-            'dim_date': 'taxi.dim_date',
-            'dim_location': 'taxi.dim_location',
-            'dim_payment': 'taxi.dim_payment'
+            "dim_date": "taxi.dim_date",
+            "dim_location": "taxi.dim_location",
+            "dim_payment": "taxi.dim_payment",
         }
 
         self.logger.info("Step 1/2: Loading dimension tables...")
@@ -256,7 +260,7 @@ class PostgresLoadJob(BaseSparkJob):
 
         # Load fact table AFTER dimensions (always, regardless of full/incremental)
         self.logger.info("Step 2/2: Loading fact table...")
-        self._load_fact_table(dimensional_model['fact_trip'])
+        self._load_fact_table(dimensional_model["fact_trip"])
 
         self.logger.info("=== PostgreSQL load complete ===")
 
@@ -295,7 +299,7 @@ class PostgresLoadJob(BaseSparkJob):
                 port=port,
                 database=database,
                 user=self.postgres_user,
-                password=self.postgres_password
+                password=self.postgres_password,
             )
             conn.autocommit = False
             cursor = conn.cursor()
@@ -310,12 +314,11 @@ class PostgresLoadJob(BaseSparkJob):
 
             # INSERT new data via Spark JDBC (append mode)
             self.logger.info(f"Inserting {record_count:,} records into {table_name}...")
-            df.write \
-                .jdbc(
+            df.write.jdbc(
                 url=self.postgres_url,
                 table=table_name,
                 mode="append",  # Append to empty table after truncate
-                properties=self.postgres_properties
+                properties=self.postgres_properties,
             )
 
             self.logger.info(f"✓ Loaded {dim_name}: {record_count:,} records")
@@ -347,7 +350,9 @@ class PostgresLoadJob(BaseSparkJob):
 
         # Verify fact_hash column exists
         if "fact_hash" not in df.columns:
-            raise JobExecutionError("fact_hash column not found - cannot perform idempotent load")
+            raise JobExecutionError(
+                "fact_hash column not found - cannot perform idempotent load"
+            )
 
         self.logger.info(f"Loading fact_trip using hash-based upsert (idempotent)...")
         self.logger.info(f"Records to upsert: {record_count:,}")
@@ -355,7 +360,9 @@ class PostgresLoadJob(BaseSparkJob):
         try:
             # Use temporary table approach for true upsert
             self._upsert_via_temp_table(df, table_name)
-            self.logger.info(f"✓ Upserted fact_trip: {record_count:,} records (idempotent)")
+            self.logger.info(
+                f"✓ Upserted fact_trip: {record_count:,} records (idempotent)"
+            )
 
         except Exception as e:
             raise JobExecutionError(f"Failed to upsert fact_trip: {e}") from e
@@ -388,13 +395,14 @@ class PostgresLoadJob(BaseSparkJob):
         try:
             # Write data to temporary table via Spark JDBC
             record_count = df.count()
-            self.logger.info(f"Loading {record_count:,} records into temporary table...")
-            df.write \
-                .jdbc(
+            self.logger.info(
+                f"Loading {record_count:,} records into temporary table..."
+            )
+            df.write.jdbc(
                 url=self.postgres_url,
                 table=temp_table,
                 mode="overwrite",  # Drop/create temp table
-                properties=self.postgres_properties
+                properties=self.postgres_properties,
             )
 
             # Create index on fact_hash for fast upsert lookups
@@ -415,14 +423,16 @@ class PostgresLoadJob(BaseSparkJob):
                 port=port,
                 database=database,
                 user=self.postgres_user,
-                password=self.postgres_password
+                password=self.postgres_password,
             )
             conn.autocommit = False
             cursor = conn.cursor()
 
             # Create index on fact_hash for fast ON CONFLICT lookups
             self.logger.info(f"Creating index on {temp_table}...")
-            cursor.execute(f"CREATE INDEX idx_temp_fact_hash ON {temp_table} (fact_hash)")
+            cursor.execute(
+                f"CREATE INDEX idx_temp_fact_hash ON {temp_table} (fact_hash)"
+            )
             conn.commit()
             self.logger.info("✓ Index created")
 
@@ -438,34 +448,41 @@ class PostgresLoadJob(BaseSparkJob):
             # Check if target table is empty for optimization
             cursor.execute(f"SELECT COUNT(*) FROM {target_table}")
             target_count = cursor.fetchone()[0]
-            is_initial_load = (target_count == 0)
+            is_initial_load = target_count == 0
 
             if is_initial_load:
-                self.logger.info(f"Target table is empty - using BULK INSERT optimization")
+                self.logger.info(
+                    f"Target table is empty - using BULK INSERT optimization"
+                )
 
                 # OPTIMIZATION: Drop ALL indexes including PK and unique constraint
                 # We'll recreate them after bulk load for maximum speed
                 self.logger.info("Checking for indexes to optimize bulk insert...")
 
                 # Get ALL indexes (including PK and unique constraint)
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT indexname, indexdef
                     FROM pg_indexes
                     WHERE schemaname = 'taxi'
                       AND tablename = 'fact_trip'
-                """)
+                """
+                )
                 existing_indexes = cursor.fetchall()
 
                 if existing_indexes:
                     self.logger.info(
-                        f"Dropping ALL {len(existing_indexes)} indexes (including PK) for fastest bulk insert...")
+                        f"Dropping ALL {len(existing_indexes)} indexes (including PK) for fastest bulk insert..."
+                    )
 
                     # First, drop FK constraints that reference this table's PK
                     self.logger.info("Temporarily dropping FK constraints...")
-                    cursor.execute(f"""
+                    cursor.execute(
+                        f"""
                         ALTER TABLE {target_table} DROP CONSTRAINT IF EXISTS uq_fact_trip_hash,
                         DROP CONSTRAINT IF EXISTS fact_trip_pkey CASCADE
-                    """)
+                    """
+                    )
                     conn.commit()
 
                     # Store index definitions for recreation
@@ -483,13 +500,17 @@ class PostgresLoadJob(BaseSparkJob):
 
                 # OPTIMIZATION: Convert target table to UNLOGGED for super-fast bulk insert
                 # UNLOGGED tables skip WAL logging = 3-5x faster inserts
-                self.logger.info("Converting target table to UNLOGGED for faster bulk insert...")
+                self.logger.info(
+                    "Converting target table to UNLOGGED for faster bulk insert..."
+                )
                 cursor.execute(f"ALTER TABLE {target_table} SET UNLOGGED")
                 conn.commit()
                 self.logger.info("✓ Target table is now UNLOGGED (no WAL overhead)")
 
                 # OPTIMIZATION: Disable FK constraints during bulk load for speed
-                self.logger.info("Disabling foreign key constraints for faster bulk insert...")
+                self.logger.info(
+                    "Disabling foreign key constraints for faster bulk insert..."
+                )
                 cursor.execute(f"ALTER TABLE {target_table} DISABLE TRIGGER ALL")
                 conn.commit()
                 self.logger.info("✓ FK constraints disabled")
@@ -514,7 +535,9 @@ class PostgresLoadJob(BaseSparkJob):
                     FROM {temp_table}
                 """
             else:
-                self.logger.info(f"Target table has {target_count:,} rows - using ON CONFLICT DO NOTHING")
+                self.logger.info(
+                    f"Target table has {target_count:,} rows - using ON CONFLICT DO NOTHING"
+                )
                 # Incremental load: Use ON CONFLICT DO NOTHING (faster than DO UPDATE)
                 columns = list(df.columns)
                 columns_str = ", ".join(columns)
@@ -535,7 +558,9 @@ class PostgresLoadJob(BaseSparkJob):
             conn.commit()
 
             if is_initial_load:
-                self.logger.info(f"✓ Initial load complete: {rows_affected:,} rows inserted")
+                self.logger.info(
+                    f"✓ Initial load complete: {rows_affected:,} rows inserted"
+                )
 
                 # Convert table back to LOGGED for durability
                 self.logger.info("Converting table back to LOGGED for durability...")
@@ -556,25 +581,31 @@ class PostgresLoadJob(BaseSparkJob):
 
                 # Recreate constraints and indexes after bulk insert (if any were dropped)
                 if index_definitions:
-                    self.logger.info("Recreating constraints and indexes (this may take 10-15 minutes)...")
+                    self.logger.info(
+                        "Recreating constraints and indexes (this may take 10-15 minutes)..."
+                    )
 
                     # First recreate PK and unique constraint (most important)
                     pk_created = False
                     unique_created = False
 
                     for idx_name, idx_def in list(index_definitions.items()):
-                        if 'fact_trip_pkey' in idx_name:
+                        if "fact_trip_pkey" in idx_name:
                             self.logger.info("  Creating PRIMARY KEY constraint...")
                             cursor.execute(
-                                f"ALTER TABLE {target_table} ADD CONSTRAINT fact_trip_pkey PRIMARY KEY (trip_key)")
+                                f"ALTER TABLE {target_table} ADD CONSTRAINT fact_trip_pkey PRIMARY KEY (trip_key)"
+                            )
                             conn.commit()
                             pk_created = True
                             self.logger.info("  ✓ PRIMARY KEY created")
                             del index_definitions[idx_name]  # Remove from dict
-                        elif 'uq_fact_trip_hash' in idx_name:
-                            self.logger.info("  Creating UNIQUE constraint on fact_hash...")
+                        elif "uq_fact_trip_hash" in idx_name:
+                            self.logger.info(
+                                "  Creating UNIQUE constraint on fact_hash..."
+                            )
                             cursor.execute(
-                                f"ALTER TABLE {target_table} ADD CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)")
+                                f"ALTER TABLE {target_table} ADD CONSTRAINT uq_fact_trip_hash UNIQUE (fact_hash)"
+                            )
                             conn.commit()
                             unique_created = True
                             self.logger.info("  ✓ UNIQUE constraint created")
@@ -587,9 +618,13 @@ class PostgresLoadJob(BaseSparkJob):
                         conn.commit()
 
                     total_indexes = len(existing_indexes)
-                    self.logger.info(f"✓ Recreated {total_indexes} indexes and constraints")
+                    self.logger.info(
+                        f"✓ Recreated {total_indexes} indexes and constraints"
+                    )
                 else:
-                    self.logger.info("No indexes to recreate (indexes already exist or will be created by schema)")
+                    self.logger.info(
+                        "No indexes to recreate (indexes already exist or will be created by schema)"
+                    )
 
                 # Run ANALYZE to update statistics after bulk load
                 self.logger.info("Running ANALYZE for query optimization...")
@@ -599,20 +634,26 @@ class PostgresLoadJob(BaseSparkJob):
 
                 # Validate FK constraints after re-enabling
                 self.logger.info("Validating foreign key constraints...")
-                cursor.execute(f"""
+                cursor.execute(
+                    f"""
                     SELECT COUNT(*) FROM {target_table}
                     WHERE date_key NOT IN (SELECT date_key FROM taxi.dim_date)
                        OR pickup_location_key NOT IN (SELECT location_key FROM taxi.dim_location)
                        OR dropoff_location_key NOT IN (SELECT location_key FROM taxi.dim_location)
                        OR payment_key NOT IN (SELECT payment_key FROM taxi.dim_payment)
-                """)
+                """
+                )
                 invalid_fk_count = cursor.fetchone()[0]
                 if invalid_fk_count > 0:
-                    self.logger.warning(f"Found {invalid_fk_count} rows with invalid foreign keys!")
+                    self.logger.warning(
+                        f"Found {invalid_fk_count} rows with invalid foreign keys!"
+                    )
                 else:
                     self.logger.info("✓ All foreign keys are valid")
             else:
-                self.logger.info(f"✓ Upsert complete: {rows_affected:,} new rows inserted (duplicates skipped)")
+                self.logger.info(
+                    f"✓ Upsert complete: {rows_affected:,} new rows inserted (duplicates skipped)"
+                )
 
             # Drop temporary table
             cursor.execute(f"DROP TABLE IF EXISTS {temp_table}")
@@ -632,12 +673,12 @@ class PostgresLoadJob(BaseSparkJob):
 
 
 def run_postgres_load(
-        taxi_type: Literal["yellow", "green"],
-        year: Optional[int] = None,
-        month: Optional[int] = None,
-        postgres_url: Optional[str] = None,
-        postgres_user: Optional[str] = None,
-        postgres_password: Optional[str] = None
+    taxi_type: Literal["yellow", "green"],
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    postgres_url: Optional[str] = None,
+    postgres_user: Optional[str] = None,
+    postgres_password: Optional[str] = None,
 ) -> bool:
     """
     Convenience function to run the PostgreSQL load job.
@@ -651,12 +692,7 @@ def run_postgres_load(
     :returns: True if successful, False otherwise
     """
     job = PostgresLoadJob(
-        taxi_type,
-        year,
-        month,
-        postgres_url,
-        postgres_user,
-        postgres_password
+        taxi_type, year, month, postgres_url, postgres_user, postgres_password
     )
     return job.run()
 
@@ -665,7 +701,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="PostgreSQL Load Job")
-    parser.add_argument("--taxi-type", type=str, choices=["yellow", "green"], required=True)
+    parser.add_argument(
+        "--taxi-type", type=str, choices=["yellow", "green"], required=True
+    )
     parser.add_argument("--year", type=int, help="Year filter (optional)")
     parser.add_argument("--month", type=int, help="Month filter (optional)")
     parser.add_argument("--postgres-url", type=str, help="PostgreSQL JDBC URL")
@@ -680,6 +718,6 @@ if __name__ == "__main__":
         args.month,
         args.postgres_url,
         args.postgres_user,
-        args.postgres_password
+        args.postgres_password,
     )
     exit(0 if success else 1)

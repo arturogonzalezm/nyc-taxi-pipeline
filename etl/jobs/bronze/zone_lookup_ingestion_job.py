@@ -26,6 +26,7 @@ Design Pattern:
     - Template Method: Inherits from BaseSparkJob
     - Uses MinIO Python client for direct CSV upload
 """
+
 import requests
 import logging
 from pathlib import Path
@@ -46,6 +47,7 @@ class ReferenceDataError(JobExecutionError):
     """
     Raised when reference data validation fails
     """
+
     pass
 
 
@@ -90,10 +92,7 @@ class ZoneLookupIngestionJob(BaseSparkJob):
         Initialise the zone lookup bronze job.
         :params config: Optional job configuration (uses default singleton if not provided)
         """
-        super().__init__(
-            job_name="ZoneLookupIngestion",
-            config=config
-        )
+        super().__init__(job_name="ZoneLookupIngestion", config=config)
         self.file_name = self.FILE_NAME
         self.source_url = self.SOURCE_URL
 
@@ -127,11 +126,11 @@ class ZoneLookupIngestionJob(BaseSparkJob):
                 response = requests.get(self.source_url, stream=True, timeout=60)
                 response.raise_for_status()
 
-                file_size = int(response.headers.get('content-length', 0))
+                file_size = int(response.headers.get("content-length", 0))
                 self.logger.info(f"Downloading {file_size:,} bytes")
 
                 # Download CSV file
-                with open(local_file, 'wb') as f:
+                with open(local_file, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
@@ -141,7 +140,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
             except requests.exceptions.RequestException as e:
                 raise JobExecutionError(f"Failed to download zone lookup: {e}") from e
             except IOError as e:
-                raise JobExecutionError(f"Failed to write file {local_file}: {e}") from e
+                raise JobExecutionError(
+                    f"Failed to write file {local_file}: {e}"
+                ) from e
         else:
             self.logger.info(f"Using cached file: {local_file}")
 
@@ -179,7 +180,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
         df.show(5, truncate=False)
 
         # Validate required columns exist
-        missing_columns = [col for col in self.REQUIRED_COLUMNS if col not in df.columns]
+        missing_columns = [
+            col for col in self.REQUIRED_COLUMNS if col not in df.columns
+        ]
 
         if missing_columns:
             raise ReferenceDataError(
@@ -205,7 +208,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
         self.logger.info(f"Zone lookup validation passed: {record_count:,} records")
 
         # Check for duplicates in LocationID
-        duplicate_count = df.groupBy("LocationID").count().filter(F.col("count") > 1).count()
+        duplicate_count = (
+            df.groupBy("LocationID").count().filter(F.col("count") > 1).count()
+        )
         if duplicate_count > 0:
             self.logger.warning(
                 f"Found {duplicate_count} duplicate LocationIDs. "
@@ -248,17 +253,21 @@ class ZoneLookupIngestionJob(BaseSparkJob):
                 self._ensure_bucket_exists(minio_client, bucket_name)
 
                 # Upload file to misc directory
-                self.logger.info(f"Uploading {local_file} to {bucket_name}/{self.MINIO_OBJECT_PATH}")
+                self.logger.info(
+                    f"Uploading {local_file} to {bucket_name}/{self.MINIO_OBJECT_PATH}"
+                )
 
                 minio_client.fput_object(
                     bucket_name,
                     self.MINIO_OBJECT_PATH,
                     str(local_file),
-                    content_type="text/csv"
+                    content_type="text/csv",
                 )
 
                 self.logger.info(f"Successfully uploaded {self.file_name} to MinIO")
-                self.logger.info(f"MinIO path: s3a://{bucket_name}/{self.MINIO_OBJECT_PATH}")
+                self.logger.info(
+                    f"MinIO path: s3a://{bucket_name}/{self.MINIO_OBJECT_PATH}"
+                )
 
             except S3Error as e:
                 self.logger.error(f"MinIO S3 error: {e}")
@@ -287,7 +296,7 @@ class ZoneLookupIngestionJob(BaseSparkJob):
                 endpoint,
                 access_key=self.config.minio.access_key,
                 secret_key=self.config.minio.secret_key,
-                secure=False  # Set to True if using HTTPS
+                secure=False,  # Set to True if using HTTPS
             )
 
             self.logger.info(f"MinIO client initialized: {endpoint}")
@@ -312,7 +321,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
                 self.logger.info(f"Bucket exists: {bucket_name}")
 
         except S3Error as e:
-            raise JobExecutionError(f"Failed to check/create bucket {bucket_name}: {e}") from e
+            raise JobExecutionError(
+                f"Failed to check/create bucket {bucket_name}: {e}"
+            ) from e
 
 
 def run_zone_lookup_ingestion() -> bool:

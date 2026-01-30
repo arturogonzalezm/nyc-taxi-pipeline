@@ -32,6 +32,7 @@ Design Patterns:
     - Slowly Changing Dimensions: Type 1 (overwrite) for dimensions
     - Surrogate Keys: Integer IDs for all dimension tables
 """
+
 import sys
 from pathlib import Path
 
@@ -58,6 +59,7 @@ class DataQualityError(JobExecutionError):
 
     :raises JobExecutionError: Thrown when data quality checks fail
     """
+
     pass
 
 
@@ -120,13 +122,13 @@ class TaxiGoldJob(BaseSparkJob):
     MIN_FARE_AMOUNT = 0  # Minimum fare (can be 0 for cancelled trips)
 
     def __init__(
-            self,
-            taxi_type: Literal["yellow", "green"],
-            year: int,
-            month: int,
-            end_year: Optional[int] = None,
-            end_month: Optional[int] = None,
-            config: Optional[JobConfig] = None
+        self,
+        taxi_type: Literal["yellow", "green"],
+        year: int,
+        month: int,
+        end_year: Optional[int] = None,
+        end_month: Optional[int] = None,
+        config: Optional[JobConfig] = None,
     ):
         """
         Initialise the taxi gold layer job.
@@ -142,8 +144,7 @@ class TaxiGoldJob(BaseSparkJob):
         self._validate_parameters(taxi_type, year, month, end_year, end_month)
 
         super().__init__(
-            job_name=f"TaxiGold_{taxi_type}_{year}_{month:02d}",
-            config=config
+            job_name=f"TaxiGold_{taxi_type}_{year}_{month:02d}", config=config
         )
         self.taxi_type = taxi_type
         self.year = year
@@ -153,11 +154,11 @@ class TaxiGoldJob(BaseSparkJob):
 
     @staticmethod
     def _validate_parameters(
-            taxi_type: str,
-            year: int,
-            month: int,
-            end_year: Optional[int],
-            end_month: Optional[int]
+        taxi_type: str,
+        year: int,
+        month: int,
+        end_year: Optional[int],
+        end_month: Optional[int],
     ) -> None:
         """
         Validate job parameters.
@@ -172,12 +173,13 @@ class TaxiGoldJob(BaseSparkJob):
 
         if not isinstance(year, int) or year < TaxiGoldJob.MIN_YEAR:
             raise ValueError(
-                f"Invalid year: {year}. "
-                f"Must be integer >= {TaxiGoldJob.MIN_YEAR}"
+                f"Invalid year: {year}. " f"Must be integer >= {TaxiGoldJob.MIN_YEAR}"
             )
 
         if not isinstance(month, int) or not 1 <= month <= 12:
-            raise ValueError(f"Invalid month: {month}. Must be integer between 1 and 12")
+            raise ValueError(
+                f"Invalid month: {month}. Must be integer between 1 and 12"
+            )
 
         if end_year and end_month:
             if end_year < year or (end_year == year and end_month < month):
@@ -247,10 +249,11 @@ class TaxiGoldJob(BaseSparkJob):
                 self.logger.info(f"Reading partition: year={year}, month={month}...")
 
                 # Read partition with ignoreCorruptFiles option
-                df_partition = self.spark.read \
-                    .option("ignoreCorruptFiles", "true") \
-                    .option("mode", "PERMISSIVE") \
+                df_partition = (
+                    self.spark.read.option("ignoreCorruptFiles", "true")
+                    .option("mode", "PERMISSIVE")
                     .parquet(partition_path)
+                )
 
                 # Force evaluation to catch corrupted files before adding to list
                 # Use take(1) which is faster than count() for validation
@@ -287,7 +290,9 @@ class TaxiGoldJob(BaseSparkJob):
             )
 
         # Standardize schema across all partitions (handle schema evolution)
-        self.logger.info(f"Standardizing schema across partitions ({len(all_columns)} total columns)")
+        self.logger.info(
+            f"Standardizing schema across partitions ({len(all_columns)} total columns)"
+        )
         self.logger.info(f"All columns found: {sorted(all_columns)}")
 
         standardized_dfs = []
@@ -298,7 +303,9 @@ class TaxiGoldJob(BaseSparkJob):
             missing_cols = all_columns - original_cols
 
             if missing_cols:
-                self.logger.info(f"Partition {idx + 1}: Adding {len(missing_cols)} missing columns: {missing_cols}")
+                self.logger.info(
+                    f"Partition {idx + 1}: Adding {len(missing_cols)} missing columns: {missing_cols}"
+                )
                 # Add missing columns as null
                 for col in missing_cols:
                     df = df.withColumn(col, F.lit(None))
@@ -307,7 +314,9 @@ class TaxiGoldJob(BaseSparkJob):
             df = df.select(*column_order)
 
             # Verify schema alignment
-            self.logger.info(f"Partition {idx + 1}: {len(df.columns)} columns after standardization")
+            self.logger.info(
+                f"Partition {idx + 1}: {len(df.columns)} columns after standardization"
+            )
             standardized_dfs.append(df)
 
         # Verify all DataFrames have the same number of columns
@@ -317,7 +326,9 @@ class TaxiGoldJob(BaseSparkJob):
                 f"Schema standardization failed: DataFrames have different column counts: {col_counts}"
             )
 
-        self.logger.info(f"All {len(standardized_dfs)} partitions standardized to {col_counts[0]} columns")
+        self.logger.info(
+            f"All {len(standardized_dfs)} partitions standardized to {col_counts[0]} columns"
+        )
 
         # Union all partitions with standardized schemas
         trips_df = standardized_dfs[0]
@@ -345,9 +356,7 @@ class TaxiGoldJob(BaseSparkJob):
 
         try:
             zones_df = self.spark.read.csv(
-                zone_lookup_path,
-                header=True,
-                inferSchema=True
+                zone_lookup_path, header=True, inferSchema=True
             )
             zone_count = zones_df.count()
             self.logger.info(f"Loaded {zone_count:,} zone records")
@@ -394,15 +403,17 @@ class TaxiGoldJob(BaseSparkJob):
         dim_payment = self._create_dim_payment(trips_standardized)
 
         # Create fact table
-        fact_trip = self._create_fact_trip(trips_standardized, dim_date, dim_location, dim_payment)
+        fact_trip = self._create_fact_trip(
+            trips_standardized, dim_date, dim_location, dim_payment
+        )
 
         self.logger.info("=== Gold Layer Transformation Complete ===")
 
         return {
-            'fact_trip': fact_trip,
-            'dim_date': dim_date,
-            'dim_location': dim_location,
-            'dim_payment': dim_payment
+            "fact_trip": fact_trip,
+            "dim_date": dim_date,
+            "dim_location": dim_location,
+            "dim_payment": dim_payment,
         }
 
     def _remove_duplicates(self, df: DataFrame) -> DataFrame:
@@ -428,18 +439,24 @@ class TaxiGoldJob(BaseSparkJob):
 
         if "record_hash" in df.columns:
             # Hash-based deduplication with SCD Type 1 logic
-            self.logger.info("Deduplicating using record_hash (SCD Type 1: keeping latest)")
+            self.logger.info(
+                "Deduplicating using record_hash (SCD Type 1: keeping latest)"
+            )
 
             # Check if we have ingestion_timestamp for SCD Type 1
             if "ingestion_timestamp" in df.columns:
                 # Window function to keep latest record per hash
                 from pyspark.sql.window import Window
 
-                window_spec = Window.partitionBy("record_hash").orderBy(F.col("ingestion_timestamp").desc())
+                window_spec = Window.partitionBy("record_hash").orderBy(
+                    F.col("ingestion_timestamp").desc()
+                )
 
-                df_deduped = df.withColumn("row_num", F.row_number().over(window_spec)) \
-                    .filter(F.col("row_num") == 1) \
+                df_deduped = (
+                    df.withColumn("row_num", F.row_number().over(window_spec))
+                    .filter(F.col("row_num") == 1)
                     .drop("row_num")
+                )
 
                 deduped_count = df_deduped.count()
                 removed_count = initial_count - deduped_count
@@ -454,11 +471,15 @@ class TaxiGoldJob(BaseSparkJob):
                 return df_deduped
             else:
                 # Simple hash deduplication (no timestamp available)
-                self.logger.warning("ingestion_timestamp not found, using simple deduplication")
+                self.logger.warning(
+                    "ingestion_timestamp not found, using simple deduplication"
+                )
                 return df.dropDuplicates(["record_hash"])
         else:
             # Fallback: deduplicate on all columns (slower)
-            self.logger.warning("record_hash not found in bronze data - deduplicating using all columns")
+            self.logger.warning(
+                "record_hash not found in bronze data - deduplicating using all columns"
+            )
             return df.dropDuplicates()
 
     def _apply_data_quality_filters(self, df: DataFrame) -> DataFrame:
@@ -478,58 +499,80 @@ class TaxiGoldJob(BaseSparkJob):
         initial_count = df.count()
 
         # Identify pickup/dropoff datetime columns (different names for yellow/green)
-        pickup_col = "tpep_pickup_datetime" if "tpep_pickup_datetime" in df.columns else "lpep_pickup_datetime"
-        dropoff_col = "tpep_dropoff_datetime" if "tpep_dropoff_datetime" in df.columns else "lpep_dropoff_datetime"
+        pickup_col = (
+            "tpep_pickup_datetime"
+            if "tpep_pickup_datetime" in df.columns
+            else "lpep_pickup_datetime"
+        )
+        dropoff_col = (
+            "tpep_dropoff_datetime"
+            if "tpep_dropoff_datetime" in df.columns
+            else "lpep_dropoff_datetime"
+        )
 
         # Add quality flags
-        df_with_flags = df.withColumn(
-            "has_null_timestamps",
-            F.col(pickup_col).isNull() | F.col(dropoff_col).isNull()
-        ).withColumn(
-            "has_invalid_fare",
-            (F.col("fare_amount") < self.MIN_FARE_AMOUNT) | (F.col("fare_amount") > self.MAX_FARE_AMOUNT)
-        ).withColumn(
-            "has_invalid_distance",
-            (F.col("trip_distance") < 0) | (F.col("trip_distance") > self.MAX_TRIP_DISTANCE_MILES)
-        ).withColumn(
-            "has_invalid_passenger_count",
-            (F.col("passenger_count") < 0) | (F.col("passenger_count") > 9)
-        ).withColumn(
-            "has_invalid_location",
-            F.col("PULocationID").isNull() | F.col("DOLocationID").isNull()
+        df_with_flags = (
+            df.withColumn(
+                "has_null_timestamps",
+                F.col(pickup_col).isNull() | F.col(dropoff_col).isNull(),
+            )
+            .withColumn(
+                "has_invalid_fare",
+                (F.col("fare_amount") < self.MIN_FARE_AMOUNT)
+                | (F.col("fare_amount") > self.MAX_FARE_AMOUNT),
+            )
+            .withColumn(
+                "has_invalid_distance",
+                (F.col("trip_distance") < 0)
+                | (F.col("trip_distance") > self.MAX_TRIP_DISTANCE_MILES),
+            )
+            .withColumn(
+                "has_invalid_passenger_count",
+                (F.col("passenger_count") < 0) | (F.col("passenger_count") > 9),
+            )
+            .withColumn(
+                "has_invalid_location",
+                F.col("PULocationID").isNull() | F.col("DOLocationID").isNull(),
+            )
         )
 
         # Calculate trip duration and flag unrealistic values
         df_with_flags = df_with_flags.withColumn(
             "trip_duration_seconds",
-            F.unix_timestamp(F.col(dropoff_col)) - F.unix_timestamp(F.col(pickup_col))
+            F.unix_timestamp(F.col(dropoff_col)) - F.unix_timestamp(F.col(pickup_col)),
         ).withColumn(
             "has_invalid_duration",
-            (F.col("trip_duration_seconds") <= 0) |
-            (F.col("trip_duration_seconds") > self.MAX_TRIP_DURATION_HOURS * 3600)
+            (F.col("trip_duration_seconds") <= 0)
+            | (F.col("trip_duration_seconds") > self.MAX_TRIP_DURATION_HOURS * 3600),
         )
 
         # Composite quality flag
         df_with_flags = df_with_flags.withColumn(
             "is_valid_record",
-            ~(F.col("has_null_timestamps") |
-              F.col("has_invalid_fare") |
-              F.col("has_invalid_distance") |
-              F.col("has_invalid_passenger_count") |
-              F.col("has_invalid_location") |
-              F.col("has_invalid_duration"))
+            ~(
+                F.col("has_null_timestamps")
+                | F.col("has_invalid_fare")
+                | F.col("has_invalid_distance")
+                | F.col("has_invalid_passenger_count")
+                | F.col("has_invalid_location")
+                | F.col("has_invalid_duration")
+            ),
         )
 
         # Log quality metrics
         total_invalid = df_with_flags.filter(~F.col("is_valid_record")).count()
         self.logger.info(f"Data quality summary:")
         self.logger.info(f"  Initial records: {initial_count:,}")
-        self.logger.info(f"  Invalid records: {total_invalid:,} ({100 * total_invalid / initial_count:.2f}%)")
+        self.logger.info(
+            f"  Invalid records: {total_invalid:,} ({100 * total_invalid / initial_count:.2f}%)"
+        )
 
         # Filter to valid records only
         df_clean = df_with_flags.filter(F.col("is_valid_record"))
         clean_count = df_clean.count()
-        self.logger.info(f"  Clean records: {clean_count:,} ({100 * clean_count / initial_count:.2f}%)")
+        self.logger.info(
+            f"  Clean records: {clean_count:,} ({100 * clean_count / initial_count:.2f}%)"
+        )
 
         return df_clean
 
@@ -544,11 +587,13 @@ class TaxiGoldJob(BaseSparkJob):
         """
         # Check which datetime columns exist
         if "tpep_pickup_datetime" in df.columns:
-            df = df.withColumnRenamed("tpep_pickup_datetime", "pickup_datetime") \
-                .withColumnRenamed("tpep_dropoff_datetime", "dropoff_datetime")
+            df = df.withColumnRenamed(
+                "tpep_pickup_datetime", "pickup_datetime"
+            ).withColumnRenamed("tpep_dropoff_datetime", "dropoff_datetime")
         elif "lpep_pickup_datetime" in df.columns:
-            df = df.withColumnRenamed("lpep_pickup_datetime", "pickup_datetime") \
-                .withColumnRenamed("lpep_dropoff_datetime", "dropoff_datetime")
+            df = df.withColumnRenamed(
+                "lpep_pickup_datetime", "pickup_datetime"
+            ).withColumnRenamed("lpep_dropoff_datetime", "dropoff_datetime")
 
         self.logger.info("Schema standardized: pickup_datetime, dropoff_datetime")
         return df
@@ -570,41 +615,27 @@ class TaxiGoldJob(BaseSparkJob):
         ).distinct()
 
         # Add calendar attributes
-        dim_date = dates_df.withColumn(
-            "date_key",
-            F.date_format("date", "yyyyMMdd").cast(IntegerType())
-        ).withColumn(
-            "year",
-            F.year("date")
-        ).withColumn(
-            "quarter",
-            F.quarter("date")
-        ).withColumn(
-            "month",
-            F.month("date")
-        ).withColumn(
-            "month_name",
-            F.date_format("date", "MMMM")
-        ).withColumn(
-            "day",
-            F.dayofmonth("date")
-        ).withColumn(
-            "day_of_week",
-            F.dayofweek("date")
-        ).withColumn(
-            "day_of_week_name",
-            F.date_format("date", "EEEE")
-        ).withColumn(
-            "is_weekend",
-            F.col("day_of_week").isin([1, 7])  # Sunday=1, Saturday=7
-        ).withColumn(
-            "week_of_year",
-            F.weekofyear("date")
+        dim_date = (
+            dates_df.withColumn(
+                "date_key", F.date_format("date", "yyyyMMdd").cast(IntegerType())
+            )
+            .withColumn("year", F.year("date"))
+            .withColumn("quarter", F.quarter("date"))
+            .withColumn("month", F.month("date"))
+            .withColumn("month_name", F.date_format("date", "MMMM"))
+            .withColumn("day", F.dayofmonth("date"))
+            .withColumn("day_of_week", F.dayofweek("date"))
+            .withColumn("day_of_week_name", F.date_format("date", "EEEE"))
+            .withColumn(
+                "is_weekend", F.col("day_of_week").isin([1, 7])  # Sunday=1, Saturday=7
+            )
+            .withColumn("week_of_year", F.weekofyear("date"))
         )
 
         # Add metadata columns
-        dim_date = dim_date.withColumn("created_timestamp", F.current_timestamp()) \
-            .withColumn("data_layer", F.lit("gold"))
+        dim_date = dim_date.withColumn(
+            "created_timestamp", F.current_timestamp()
+        ).withColumn("data_layer", F.lit("gold"))
 
         # Order columns
         dim_date = dim_date.select(
@@ -620,7 +651,7 @@ class TaxiGoldJob(BaseSparkJob):
             "is_weekend",
             "week_of_year",
             "created_timestamp",
-            "data_layer"
+            "data_layer",
         ).orderBy("date_key")
 
         date_count = dim_date.count()
@@ -644,12 +675,13 @@ class TaxiGoldJob(BaseSparkJob):
             F.col("LocationID").cast(IntegerType()).alias("location_key"),
             F.col("Borough").alias("borough"),
             F.col("Zone").alias("zone"),
-            F.col("service_zone").alias("service_zone")
+            F.col("service_zone").alias("service_zone"),
         ).distinct()
 
         # Add metadata columns
-        dim_location = dim_location.withColumn("created_timestamp", F.current_timestamp()) \
-            .withColumn("data_layer", F.lit("gold"))
+        dim_location = dim_location.withColumn(
+            "created_timestamp", F.current_timestamp()
+        ).withColumn("data_layer", F.lit("gold"))
 
         dim_location = dim_location.select(
             "location_key",
@@ -657,7 +689,7 @@ class TaxiGoldJob(BaseSparkJob):
             "zone",
             "service_zone",
             "created_timestamp",
-            "data_layer"
+            "data_layer",
         ).orderBy("location_key")
 
         location_count = dim_location.count()
@@ -679,36 +711,38 @@ class TaxiGoldJob(BaseSparkJob):
         # Extract unique payment type and rate code combinations
         payment_df = df.select(
             F.col("payment_type").cast(IntegerType()),
-            F.col("RatecodeID").cast(IntegerType())
+            F.col("RatecodeID").cast(IntegerType()),
         ).distinct()
 
         # Add descriptive labels
-        dim_payment = payment_df.withColumn(
-            "payment_type_desc",
-            F.when(F.col("payment_type") == 1, "Credit card")
-            .when(F.col("payment_type") == 2, "Cash")
-            .when(F.col("payment_type") == 3, "No charge")
-            .when(F.col("payment_type") == 4, "Dispute")
-            .when(F.col("payment_type") == 5, "Unknown")
-            .when(F.col("payment_type") == 6, "Voided trip")
-            .otherwise("Unknown")
-        ).withColumn(
-            "rate_code_desc",
-            F.when(F.col("RatecodeID") == 1, "Standard rate")
-            .when(F.col("RatecodeID") == 2, "JFK")
-            .when(F.col("RatecodeID") == 3, "Newark")
-            .when(F.col("RatecodeID") == 4, "Nassau or Westchester")
-            .when(F.col("RatecodeID") == 5, "Negotiated fare")
-            .when(F.col("RatecodeID") == 6, "Group ride")
-            .otherwise("Unknown")
-        ).withColumn(
-            "payment_key",
-            F.monotonically_increasing_id()
+        dim_payment = (
+            payment_df.withColumn(
+                "payment_type_desc",
+                F.when(F.col("payment_type") == 1, "Credit card")
+                .when(F.col("payment_type") == 2, "Cash")
+                .when(F.col("payment_type") == 3, "No charge")
+                .when(F.col("payment_type") == 4, "Dispute")
+                .when(F.col("payment_type") == 5, "Unknown")
+                .when(F.col("payment_type") == 6, "Voided trip")
+                .otherwise("Unknown"),
+            )
+            .withColumn(
+                "rate_code_desc",
+                F.when(F.col("RatecodeID") == 1, "Standard rate")
+                .when(F.col("RatecodeID") == 2, "JFK")
+                .when(F.col("RatecodeID") == 3, "Newark")
+                .when(F.col("RatecodeID") == 4, "Nassau or Westchester")
+                .when(F.col("RatecodeID") == 5, "Negotiated fare")
+                .when(F.col("RatecodeID") == 6, "Group ride")
+                .otherwise("Unknown"),
+            )
+            .withColumn("payment_key", F.monotonically_increasing_id())
         )
 
         # Add metadata columns
-        dim_payment = dim_payment.withColumn("created_timestamp", F.current_timestamp()) \
-            .withColumn("data_layer", F.lit("gold"))
+        dim_payment = dim_payment.withColumn(
+            "created_timestamp", F.current_timestamp()
+        ).withColumn("data_layer", F.lit("gold"))
 
         # Order columns
         dim_payment = dim_payment.select(
@@ -718,20 +752,22 @@ class TaxiGoldJob(BaseSparkJob):
             F.col("RatecodeID").alias("rate_code_id"),
             "rate_code_desc",
             "created_timestamp",
-            "data_layer"
+            "data_layer",
         ).orderBy("payment_key")
 
         payment_count = dim_payment.count()
-        self.logger.info(f"Created dim_payment: {payment_count:,} unique payment combinations")
+        self.logger.info(
+            f"Created dim_payment: {payment_count:,} unique payment combinations"
+        )
 
         return dim_payment
 
     def _create_fact_trip(
-            self,
-            trips_df: DataFrame,
-            dim_date: DataFrame,
-            dim_location: DataFrame,
-            dim_payment: DataFrame
+        self,
+        trips_df: DataFrame,
+        dim_date: DataFrame,
+        dim_location: DataFrame,
+        dim_payment: DataFrame,
     ) -> DataFrame:
         """
         Create fact table with foreign keys to dimensions.
@@ -747,7 +783,9 @@ class TaxiGoldJob(BaseSparkJob):
         # Create date key from pickup datetime
         fact = trips_df.withColumn(
             "date_key",
-            F.date_format(F.col("pickup_datetime").cast("date"), "yyyyMMdd").cast(IntegerType())
+            F.date_format(F.col("pickup_datetime").cast("date"), "yyyyMMdd").cast(
+                IntegerType()
+            ),
         )
 
         # Join with dim_payment to get payment_key
@@ -755,46 +793,52 @@ class TaxiGoldJob(BaseSparkJob):
             dim_payment.select(
                 "payment_key",
                 F.col("payment_type_id").alias("payment_type"),
-                F.col("rate_code_id").alias("RatecodeID")
+                F.col("rate_code_id").alias("RatecodeID"),
             ),
             on=["payment_type", "RatecodeID"],
-            how="left"
+            how="left",
         )
 
         # Add surrogate key for fact table (use BIGINT for large datasets)
-        fact = fact.withColumn(
-            "trip_key",
-            F.monotonically_increasing_id()
-        )
+        fact = fact.withColumn("trip_key", F.monotonically_increasing_id())
 
         # Calculate derived measures
-        fact = fact.withColumn(
-            "trip_duration_minutes",
-            F.col("trip_duration_seconds") / 60.0
-        ).withColumn(
-            "total_amount_with_tip",
-            F.col("total_amount")
-        ).withColumn(
-            "tip_percentage",
-            F.when(F.col("fare_amount") > 0, (F.col("tip_amount") / F.col("fare_amount")) * 100)
-            .otherwise(0)
-        ).withColumn(
-            "avg_speed_mph",
-            F.when(
-                (F.col("trip_duration_seconds") > 0) & (F.col("trip_distance") > 0),
-                (F.col("trip_distance") / (F.col("trip_duration_seconds") / 3600.0))
-            ).otherwise(0)
+        fact = (
+            fact.withColumn(
+                "trip_duration_minutes", F.col("trip_duration_seconds") / 60.0
+            )
+            .withColumn("total_amount_with_tip", F.col("total_amount"))
+            .withColumn(
+                "tip_percentage",
+                F.when(
+                    F.col("fare_amount") > 0,
+                    (F.col("tip_amount") / F.col("fare_amount")) * 100,
+                ).otherwise(0),
+            )
+            .withColumn(
+                "avg_speed_mph",
+                F.when(
+                    (F.col("trip_duration_seconds") > 0) & (F.col("trip_distance") > 0),
+                    (
+                        F.col("trip_distance")
+                        / (F.col("trip_duration_seconds") / 3600.0)
+                    ),
+                ).otherwise(0),
+            )
         )
 
         # Extract year/month from pickup_datetime for partitioning
-        fact = fact.withColumn("partition_year", F.year(F.col("pickup_datetime"))) \
-            .withColumn("partition_month", F.month(F.col("pickup_datetime")))
+        fact = fact.withColumn(
+            "partition_year", F.year(F.col("pickup_datetime"))
+        ).withColumn("partition_month", F.month(F.col("pickup_datetime")))
 
         # Add gold layer metadata columns
-        fact = fact.withColumn("gold_transformation_timestamp", F.current_timestamp()) \
-            .withColumn("gold_transformation_date", F.current_date()) \
-            .withColumn("gold_job_name", F.lit(self.job_name)) \
+        fact = (
+            fact.withColumn("gold_transformation_timestamp", F.current_timestamp())
+            .withColumn("gold_transformation_date", F.current_date())
+            .withColumn("gold_job_name", F.lit(self.job_name))
             .withColumn("data_layer", F.lit("gold"))
+        )
 
         # Select final fact table columns (for hash computation)
         fact_trip = fact.select(
@@ -823,25 +867,41 @@ class TaxiGoldJob(BaseSparkJob):
             "gold_transformation_timestamp",
             "gold_transformation_date",
             "gold_job_name",
-            "data_layer"
+            "data_layer",
         )
 
         # Add fact_hash for data integrity and upsert operations
         # Hash includes business keys and measures (excluding trip_key and metadata)
         fact_hash_columns = [
-            "date_key", "pickup_location_key", "dropoff_location_key", "payment_key",
-            "pickup_datetime", "dropoff_datetime", "passenger_count", "trip_distance",
-            "fare_amount", "tip_amount", "total_amount"
+            "date_key",
+            "pickup_location_key",
+            "dropoff_location_key",
+            "payment_key",
+            "pickup_datetime",
+            "dropoff_datetime",
+            "passenger_count",
+            "trip_distance",
+            "fare_amount",
+            "tip_amount",
+            "total_amount",
         ]
 
-        self.logger.info(f"Computing fact_hash from {len(fact_hash_columns)} key columns")
+        self.logger.info(
+            f"Computing fact_hash from {len(fact_hash_columns)} key columns"
+        )
 
         fact_trip = fact_trip.withColumn(
             "fact_hash",
             F.sha2(
-                F.concat_ws("||", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in fact_hash_columns]),
-                256
-            )
+                F.concat_ws(
+                    "||",
+                    *[
+                        F.coalesce(F.col(c).cast("string"), F.lit(""))
+                        for c in fact_hash_columns
+                    ],
+                ),
+                256,
+            ),
         )
 
         fact_count = fact_trip.count()
@@ -871,7 +931,9 @@ class TaxiGoldJob(BaseSparkJob):
         null_hashes = fact_trip.filter(F.col("fact_hash").isNull()).count()
         if null_hashes > 0:
             self.logger.error(f"Found {null_hashes:,} records with NULL fact_hash")
-            raise JobExecutionError(f"Data integrity error: {null_hashes} NULL hashes found")
+            raise JobExecutionError(
+                f"Data integrity error: {null_hashes} NULL hashes found"
+            )
 
         # Check Hash uniqueness
         unique_hashes = fact_trip.select("fact_hash").distinct().count()
@@ -883,13 +945,21 @@ class TaxiGoldJob(BaseSparkJob):
             )
             # This is acceptable - duplicates should have been filtered in deduplication step
         else:
-            self.logger.info(f"✓ Hash uniqueness verified: All {total_records:,} hashes are unique")
+            self.logger.info(
+                f"✓ Hash uniqueness verified: All {total_records:,} hashes are unique"
+            )
 
         # Check Hash length and format (SHA-256 = 64 hex characters)
-        invalid_hash_length = fact_trip.filter(F.length(F.col("fact_hash")) != 64).count()
+        invalid_hash_length = fact_trip.filter(
+            F.length(F.col("fact_hash")) != 64
+        ).count()
         if invalid_hash_length > 0:
-            self.logger.error(f"Found {invalid_hash_length:,} hashes with invalid length (expected 64)")
-            raise JobExecutionError(f"Data integrity error: {invalid_hash_length} invalid hash lengths")
+            self.logger.error(
+                f"Found {invalid_hash_length:,} hashes with invalid length (expected 64)"
+            )
+            raise JobExecutionError(
+                f"Data integrity error: {invalid_hash_length} invalid hash lengths"
+            )
 
         self.logger.info("✓ All hash integrity checks passed")
 
@@ -899,7 +969,7 @@ class TaxiGoldJob(BaseSparkJob):
             F.avg("trip_distance").alias("avg_distance"),
             F.avg("fare_amount").alias("avg_fare"),
             F.avg("trip_duration_minutes").alias("avg_duration_min"),
-            F.avg("tip_percentage").alias("avg_tip_pct")
+            F.avg("tip_percentage").alias("avg_tip_pct"),
         ).show()
 
         return fact_trip
@@ -931,55 +1001,65 @@ class TaxiGoldJob(BaseSparkJob):
         self.logger.info(f"Writing dimensional model to gold layer: {gold_base_path}")
 
         # Write fact table (partitioned with dynamic partition overwrite)
-        fact_trip = dimensional_model['fact_trip']
+        fact_trip = dimensional_model["fact_trip"]
         fact_path = f"{gold_base_path}/fact_trip"
 
         # Get partition info for logging
-        partitions = fact_trip.select("partition_year", "partition_month").distinct().collect()
-        partition_list = [(row.partition_year, row.partition_month) for row in partitions]
+        partitions = (
+            fact_trip.select("partition_year", "partition_month").distinct().collect()
+        )
+        partition_list = [
+            (row.partition_year, row.partition_month) for row in partitions
+        ]
         self.logger.info(f"Writing fact_trip to {fact_path}")
-        self.logger.info(f"Overwriting {len(partition_list)} partition(s): {partition_list}")
+        self.logger.info(
+            f"Overwriting {len(partition_list)} partition(s): {partition_list}"
+        )
 
         # Use dynamic partition overwrite mode
         # This only overwrites the specific partitions being written, not the entire table
-        fact_trip.write \
-            .mode("overwrite") \
-            .option("partitionOverwriteMode", "dynamic") \
-            .partitionBy("partition_year", "partition_month") \
-            .option("compression", "snappy") \
-            .parquet(fact_path)
+        fact_trip.write.mode("overwrite").option(
+            "partitionOverwriteMode", "dynamic"
+        ).partitionBy("partition_year", "partition_month").option(
+            "compression", "snappy"
+        ).parquet(
+            fact_path
+        )
 
         fact_count = fact_trip.count()
         self.logger.info(f"Wrote fact_trip: {fact_count:,} records")
 
         # Write dimension tables (not partitioned - small lookup tables)
         # Full overwrite is appropriate for dimensions (SCD Type 1)
-        for dim_name in ['dim_date', 'dim_location', 'dim_payment']:
+        for dim_name in ["dim_date", "dim_location", "dim_payment"]:
             dim_df = dimensional_model[dim_name]
             dim_path = f"{gold_base_path}/{dim_name}"
             self.logger.info(f"Writing {dim_name} to {dim_path}...")
 
-            dim_df.write \
-                .mode("overwrite") \
-                .option("compression", "snappy") \
-                .parquet(dim_path)
+            dim_df.write.mode("overwrite").option("compression", "snappy").parquet(
+                dim_path
+            )
 
             dim_count = dim_df.count()
             self.logger.info(f"Wrote {dim_name}: {dim_count:,} records")
 
         self.logger.info("=== Gold layer load complete ===")
         self.logger.info("Data integrity notes:")
-        self.logger.info("  - Fact partitions overwritten: No duplicates within processed months")
+        self.logger.info(
+            "  - Fact partitions overwritten: No duplicates within processed months"
+        )
         self.logger.info("  - Dimensions fully refreshed: Latest reference data loaded")
-        self.logger.info("  - Unprocessed partitions: Preserved (not affected by this run)")
+        self.logger.info(
+            "  - Unprocessed partitions: Preserved (not affected by this run)"
+        )
 
 
 def run_gold_job(
-        taxi_type: Literal["yellow", "green"],
-        year: int,
-        month: int,
-        end_year: Optional[int] = None,
-        end_month: Optional[int] = None
+    taxi_type: Literal["yellow", "green"],
+    year: int,
+    month: int,
+    end_year: Optional[int] = None,
+    end_month: Optional[int] = None,
 ) -> bool:
     """
     Convenience function to run the gold layer job.
@@ -999,19 +1079,19 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="NYC Taxi Gold Layer Job")
-    parser.add_argument("--taxi-type", type=str, choices=["yellow", "green"], required=True)
+    parser.add_argument(
+        "--taxi-type", type=str, choices=["yellow", "green"], required=True
+    )
     parser.add_argument("--year", type=int, required=True, help="Starting year")
-    parser.add_argument("--month", type=int, required=True, help="Starting month (1-12)")
+    parser.add_argument(
+        "--month", type=int, required=True, help="Starting month (1-12)"
+    )
     parser.add_argument("--end-year", type=int, help="Ending year (optional)")
     parser.add_argument("--end-month", type=int, help="Ending month (optional)")
 
     args = parser.parse_args()
 
     success = run_gold_job(
-        args.taxi_type,
-        args.year,
-        args.month,
-        args.end_year,
-        args.end_month
+        args.taxi_type, args.year, args.month, args.end_year, args.end_month
     )
     exit(0 if success else 1)

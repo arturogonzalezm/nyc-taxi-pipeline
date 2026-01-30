@@ -28,6 +28,7 @@ Design Patterns:
     - Strategy: Configurable extract (MinIO cache vs source)
     - Factory: Convenience functions for job creation
 """
+
 import sys
 import requests
 from pathlib import Path
@@ -53,6 +54,7 @@ class DataValidationError(JobExecutionError):
 
     :raises DataValidationError: If data does not match requested year/month or fails schema validation
     """
+
     pass
 
 
@@ -62,6 +64,7 @@ class DownloadError(JobExecutionError):
 
     :raises DownloadError: If download fails or HTTP error occurs
     """
+
     pass
 
 
@@ -108,11 +111,11 @@ class TaxiIngestionJob(BaseSparkJob):
     MIN_YEAR = 2009  # NYC TLC data starts from 2009
 
     def __init__(
-            self,
-            taxi_type: Literal["yellow", "green"],
-            year: int,
-            month: int,
-            config: Optional[JobConfig] = None
+        self,
+        taxi_type: Literal["yellow", "green"],
+        year: int,
+        month: int,
+        config: Optional[JobConfig] = None,
     ):
         """
         Initialise the taxi data bronze job.
@@ -127,8 +130,7 @@ class TaxiIngestionJob(BaseSparkJob):
         self._validate_parameters(taxi_type, year, month)
 
         super().__init__(
-            job_name=f"TaxiIngestion_{taxi_type}_{year}_{month:02d}",
-            config=config
+            job_name=f"TaxiIngestion_{taxi_type}_{year}_{month:02d}", config=config
         )
         self.taxi_type = taxi_type
         self.year = year
@@ -136,11 +138,7 @@ class TaxiIngestionJob(BaseSparkJob):
         self.file_name = f"{taxi_type}_tripdata_{year}-{month:02d}.parquet"
 
     @staticmethod
-    def _validate_parameters(
-            taxi_type: str,
-            year: int,
-            month: int
-    ) -> None:
+    def _validate_parameters(taxi_type: str, year: int, month: int) -> None:
         """
         Validate job parameters before initialization.
 
@@ -162,7 +160,9 @@ class TaxiIngestionJob(BaseSparkJob):
             )
 
         if not isinstance(month, int) or not 1 <= month <= 12:
-            raise ValueError(f"Invalid month: {month}. Must be integer between 1 and 12")
+            raise ValueError(
+                f"Invalid month: {month}. Must be integer between 1 and 12"
+            )
 
     def validate_inputs(self):
         """
@@ -177,7 +177,9 @@ class TaxiIngestionJob(BaseSparkJob):
         if self.year < 2009:
             raise ValueError(f"Invalid year: {self.year}")
 
-        self.logger.info(f"Validated inputs: {self.taxi_type}, {self.year}-{self.month:02d}")
+        self.logger.info(
+            f"Validated inputs: {self.taxi_type}, {self.year}-{self.month:02d}"
+        )
 
     def extract(self) -> DataFrame:
         """
@@ -232,12 +234,14 @@ class TaxiIngestionJob(BaseSparkJob):
         :raises JobExecutionError: If MinIO client creation fails
         """
         try:
-            endpoint = self.config.minio.endpoint.replace("http://", "").replace("https://", "")
+            endpoint = self.config.minio.endpoint.replace("http://", "").replace(
+                "https://", ""
+            )
             minio_client = Minio(
                 endpoint,
                 access_key=self.config.minio.access_key,
                 secret_key=self.config.minio.secret_key,
-                secure=False
+                secure=False,
             )
             return minio_client
         except Exception as e:
@@ -284,7 +288,7 @@ class TaxiIngestionJob(BaseSparkJob):
                 self.config.minio.bucket,
                 cache_object,
                 str(local_file),
-                content_type="application/octet-stream"
+                content_type="application/octet-stream",
             )
             self.logger.info(f"Successfully cached in MinIO: {cache_object}")
         except S3Error as e:
@@ -336,7 +340,9 @@ class TaxiIngestionJob(BaseSparkJob):
         try:
             return self.spark.read.parquet(str(local_file))
         except Exception as e:
-            raise JobExecutionError(f"Failed to read parquet file {local_file}: {e}") from e
+            raise JobExecutionError(
+                f"Failed to read parquet file {local_file}: {e}"
+            ) from e
 
     def _download_file(self, url: str, destination: Path) -> None:
         """
@@ -350,11 +356,11 @@ class TaxiIngestionJob(BaseSparkJob):
             response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
 
-            file_size = int(response.headers.get('content-length', 0))
+            file_size = int(response.headers.get("content-length", 0))
             self.logger.info(f"Downloading {file_size:,} bytes from {url}")
 
             downloaded = 0
-            with open(destination, 'wb') as f:
+            with open(destination, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
@@ -391,36 +397,56 @@ class TaxiIngestionJob(BaseSparkJob):
 
         # Identify business columns (exclude metadata columns we'll add)
         business_columns = [col for col in df.columns]
-        self.logger.info(f"Computing record_hash from {len(business_columns)} business columns")
+        self.logger.info(
+            f"Computing record_hash from {len(business_columns)} business columns"
+        )
 
         # Create record_hash from business columns using SHA-256
         # This enables deduplication and tracks data changes across layers
         # Concat all columns -> SHA-256 hash -> ensures data integrity
         df_with_hash = df.withColumn(
             "record_hash",
-            F.sha2(F.concat_ws("||", *[F.coalesce(F.col(c).cast("string"), F.lit("")) for c in business_columns]), 256)
+            F.sha2(
+                F.concat_ws(
+                    "||",
+                    *[
+                        F.coalesce(F.col(c).cast("string"), F.lit(""))
+                        for c in business_columns
+                    ],
+                ),
+                256,
+            ),
         )
 
         # Add metadata columns ONLY (no business logic transformations)
         # These metadata columns enable data lineage tracking and auditing
-        df_final = df_with_hash.withColumn("ingestion_timestamp", F.current_timestamp()) \
-            .withColumn("ingestion_date", F.current_date()) \
-            .withColumn("source_file", F.lit(self.file_name)) \
-            .withColumn("source_url", F.lit(f"{self.NYC_TLC_BASE_URL}/{self.file_name}")) \
-            .withColumn("job_name", F.lit(self.job_name)) \
-            .withColumn("data_layer", F.lit("bronze")) \
-            .withColumn("year", F.lit(self.year)) \
+        df_final = (
+            df_with_hash.withColumn("ingestion_timestamp", F.current_timestamp())
+            .withColumn("ingestion_date", F.current_date())
+            .withColumn("source_file", F.lit(self.file_name))
+            .withColumn(
+                "source_url", F.lit(f"{self.NYC_TLC_BASE_URL}/{self.file_name}")
+            )
+            .withColumn("job_name", F.lit(self.job_name))
+            .withColumn("data_layer", F.lit("bronze"))
+            .withColumn("year", F.lit(self.year))
             .withColumn("month", F.lit(self.month))
+        )
 
         # Log hash statistics
         unique_hashes = df_final.select("record_hash").distinct().count()
-        self.logger.info(f"Record hashes: {unique_hashes:,} unique out of {record_count:,} total")
+        self.logger.info(
+            f"Record hashes: {unique_hashes:,} unique out of {record_count:,} total"
+        )
         if unique_hashes < record_count:
             duplicate_count = record_count - unique_hashes
             self.logger.warning(
-                f"Found {duplicate_count:,} duplicate records in source data ({100 * duplicate_count / record_count:.2f}%)")
+                f"Found {duplicate_count:,} duplicate records in source data ({100 * duplicate_count / record_count:.2f}%)"
+            )
 
-        self.logger.info(f"Bronze layer transformation complete: {record_count:,} records")
+        self.logger.info(
+            f"Bronze layer transformation complete: {record_count:,} records"
+        )
         self.logger.info("Transformations applied: record_hash + metadata addition")
 
         return df_final
@@ -440,36 +466,34 @@ class TaxiIngestionJob(BaseSparkJob):
 
         if self.config.minio.use_minio:
             s3_path = self.config.get_s3_path("bronze", taxi_type=self.taxi_type)
-            self.logger.info(f"Writing {record_count:,} records to MinIO bronze layer: {s3_path}")
+            self.logger.info(
+                f"Writing {record_count:,} records to MinIO bronze layer: {s3_path}"
+            )
             self.logger.info(f"Partitioning by: year={self.year}, month={self.month}")
 
             # Partition by year and month for optimal performance and delta operations
-            df.write \
-                .mode("append") \
-                .partitionBy("year", "month") \
-                .option("compression", "snappy") \
-                .parquet(s3_path)
+            df.write.mode("append").partitionBy("year", "month").option(
+                "compression", "snappy"
+            ).parquet(s3_path)
 
-            self.logger.info(f"Successfully loaded {record_count:,} records to bronze layer")
+            self.logger.info(
+                f"Successfully loaded {record_count:,} records to bronze layer"
+            )
             self.logger.info(f"Path: {s3_path}/year={self.year}/month={self.month}/")
         else:
             # If not using MinIO, save locally with partitioning
             output_path = f"{self.config.cache_dir}/output/{self.taxi_type}"
-            self.logger.info(f"Writing {record_count:,} records to local path: {output_path}")
-            df.write \
-                .mode("append") \
-                .partitionBy("year", "month") \
-                .option("compression", "snappy") \
-                .parquet(output_path)
+            self.logger.info(
+                f"Writing {record_count:,} records to local path: {output_path}"
+            )
+            df.write.mode("append").partitionBy("year", "month").option(
+                "compression", "snappy"
+            ).parquet(output_path)
 
         df.unpersist()
 
 
-def run_ingestion(
-        taxi_type: Literal["yellow", "green"],
-        year: int,
-        month: int
-) -> bool:
+def run_ingestion(taxi_type: Literal["yellow", "green"], year: int, month: int) -> bool:
     """
     Convenience function to run the bronze job for a single month.
 
@@ -483,11 +507,11 @@ def run_ingestion(
 
 
 def run_bulk_ingestion(
-        taxi_type: Literal["yellow", "green"],
-        start_year: int,
-        start_month: int,
-        end_year: int,
-        end_month: int
+    taxi_type: Literal["yellow", "green"],
+    start_year: int,
+    start_month: int,
+    end_year: int,
+    end_month: int,
 ) -> dict:
     """
     Run bronze for multiple months (historical data bronze).
@@ -521,7 +545,8 @@ def run_bulk_ingestion(
 
         logger.info(f"=" * 80)
         logger.info(
-            f"Processing {taxi_type} taxi data for {year}-{month:02d} ({total_months}/{(end_date.year - start_year) * 12 + end_date.month - start_month + 1})")
+            f"Processing {taxi_type} taxi data for {year}-{month:02d} ({total_months}/{(end_date.year - start_year) * 12 + end_date.month - start_month + 1})"
+        )
         logger.info(f"=" * 80)
 
         try:
@@ -540,11 +565,20 @@ def run_bulk_ingestion(
             error_msg = str(e)
             # Check for specific error types - be more precise with 404 detection
             # Only skip if it's actually a download error with 404 status
-            if isinstance(e.__cause__, requests.exceptions.HTTPError) and e.__cause__.response.status_code == 404:
-                logger.warning(f"✗ {year}-{month:02d}: SKIPPED - Data not available (HTTP 404)")
+            if (
+                isinstance(e.__cause__, requests.exceptions.HTTPError)
+                and e.__cause__.response.status_code == 404
+            ):
+                logger.warning(
+                    f"✗ {year}-{month:02d}: SKIPPED - Data not available (HTTP 404)"
+                )
                 results[f"{year}-{month:02d}"] = "⊘ SKIPPED (404 - Data not available)"
-            elif isinstance(e, DownloadError) and ("404" in error_msg or "Not Found" in error_msg):
-                logger.warning(f"✗ {year}-{month:02d}: SKIPPED - Data not available (404)")
+            elif isinstance(e, DownloadError) and (
+                "404" in error_msg or "Not Found" in error_msg
+            ):
+                logger.warning(
+                    f"✗ {year}-{month:02d}: SKIPPED - Data not available (404)"
+                )
                 results[f"{year}-{month:02d}"] = "⊘ SKIPPED (404 - Data not available)"
             elif "timeout" in error_msg.lower():
                 logger.error(f"✗ {year}-{month:02d}: FAILED - Network timeout")
@@ -558,7 +592,9 @@ def run_bulk_ingestion(
         current_date += relativedelta(months=1)
 
     logger.info(f"\n" + "=" * 80)
-    logger.info(f"Bulk ingestion complete: {successful}/{total_months} successful, {failed} failed/skipped")
+    logger.info(
+        f"Bulk ingestion complete: {successful}/{total_months} successful, {failed} failed/skipped"
+    )
     logger.info(f"Success rate: {100 * successful / total_months:.1f}%")
     logger.info(f"=" * 80)
 
@@ -569,9 +605,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="NYC Taxi Data Ingestion Job")
-    parser.add_argument("--taxi-type", type=str, choices=["yellow", "green"], required=True)
-    parser.add_argument("--year", type=int, help="Year of the data (for single month bronze)")
-    parser.add_argument("--month", type=int, help="Month of the data (for single month bronze)")
+    parser.add_argument(
+        "--taxi-type", type=str, choices=["yellow", "green"], required=True
+    )
+    parser.add_argument(
+        "--year", type=int, help="Year of the data (for single month bronze)"
+    )
+    parser.add_argument(
+        "--month", type=int, help="Month of the data (for single month bronze)"
+    )
     parser.add_argument("--start-year", type=int, help="Start year (for bulk bronze)")
     parser.add_argument("--start-month", type=int, help="Start month (for bulk bronze)")
     parser.add_argument("--end-year", type=int, help="End year (for bulk bronze)")
@@ -591,7 +633,7 @@ if __name__ == "__main__":
             args.start_year,
             args.start_month,
             args.end_year,
-            args.end_month
+            args.end_month,
         )
         # Print summary
         print("\n=== Bulk Ingestion Results ===")
@@ -603,4 +645,5 @@ if __name__ == "__main__":
         exit(0 if failed_count == 0 else 1)
     else:
         parser.error(
-            "Either provide --year and --month for single bronze, or --start-year, --start-month, --end-year, --end-month for bulk bronze")
+            "Either provide --year and --month for single bronze, or --start-year, --start-month, --end-year, --end-month for bulk bronze"
+        )
