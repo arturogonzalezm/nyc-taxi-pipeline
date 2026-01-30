@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nyc-taxi-pipeline"
+version = "0.1.0"
+description = "NYC Taxi Data Pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    # PySpark and distributed computing
+    "pyspark==4.1.1",
+    "py4j==0.10.9.7",
+    # Google Cloud Platform
+    "google-cloud-storage==3.8.0",
+    "google-cloud-bigquery==3.40.0",
+    # Database
+    "psycopg2-binary==2.9.11",
+    # MinIO
+    "minio==7.2.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest==8.3.4",
+    "pytest-cov==7.0.0",
+    # Code Quality
+    "black==26.1.0",
+    "flake8==7.3.0",
+    "pylint==4.0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["etl*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["etl"]
+branch = true
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+fail_under = 0
