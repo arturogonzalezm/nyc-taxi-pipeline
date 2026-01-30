@@ -52,6 +52,7 @@ sequenceDiagram
 - Python 3.12+
 - Docker Desktop (for MinIO and PostgreSQL)
 - Java 17+ (for PySpark)
+- Apache Spark 4.1.1
 
 ## Quick Start
 
@@ -260,6 +261,9 @@ nyc-taxi-pipeline/
 ### Star Schema
 
 The gold layer produces a star schema with the following tables:
+
+![alt text](https://github.com/arturogonzalezm/nyc-taxi-pipeline/blob/main/docs/images/diagram.png?raw=true)
+
 
 ```
                     +---------------+
