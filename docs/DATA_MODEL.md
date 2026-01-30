@@ -6,49 +6,7 @@ The pipeline implements a **star schema** dimensional model optimized for analyt
 
 ## Star Schema Diagram
 
-```
-                    ┌─────────────────┐
-                    │    dim_date     │
-                    ├─────────────────┤
-                    │ date_key (PK)   │
-                    │ full_date       │
-                    │ year            │
-                    │ month           │
-                    │ day             │
-                    │ day_of_week     │
-                    │ day_name        │
-                    │ month_name      │
-                    │ quarter         │
-                    │ is_weekend      │
-                    └────────┬────────┘
-                             │
-┌─────────────────┐          │          ┌─────────────────┐
-│  dim_location   │          │          │  dim_payment    │
-├─────────────────┤          │          ├─────────────────┤
-│ location_id (PK)│          │          │ payment_id (PK) │
-│ borough         │          │          │ payment_type    │
-│ zone            │          │          │ description     │
-│ service_zone    │          │          └────────┬────────┘
-└────────┬────────┘          │                   │
-         │                   │                   │
-         │          ┌────────┴────────┐          │
-         │          │   fact_trip     │          │
-         │          ├─────────────────┤          │
-         └─────────▶│ trip_id (PK)    │◀─────────┘
-                    │ pickup_date_key │──────────┘
-                    │ dropoff_date_key│
-                    │ pickup_location │
-                    │ dropoff_location│
-                    │ payment_id      │
-                    │ taxi_type       │
-                    │ passenger_count │
-                    │ trip_distance   │
-                    │ fare_amount     │
-                    │ tip_amount      │
-                    │ total_amount    │
-                    │ ...             │
-                    └─────────────────┘
-```
+![alt text](https://github.com/arturogonzalezm/nyc-taxi-pipeline/blob/main/docs/images/erd.png?raw=true)
 
 ## Dimension Tables
 
