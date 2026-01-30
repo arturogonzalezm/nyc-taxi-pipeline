@@ -40,9 +40,9 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["etl"]
+source = ["etl", "tests"]
 branch = true
-omit = ["tests/*", "*/__init__.py"]
+omit = ["*/__init__.py"]
 
 [tool.coverage.report]
 exclude_lines = [
