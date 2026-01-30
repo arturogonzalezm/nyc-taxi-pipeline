@@ -25,12 +25,15 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from pyspark.sql import SparkSession
 
-
 logger = logging.getLogger(__name__)
 
 
 class SparkSessionError(Exception):
-    """Custom exception for SparkSession initialization failures"""
+    """
+    Custom exception for SparkSession initialization failures
+
+    :raises SparkSessionError: Thrown when SparkSession creation fails or configuration is invalid
+    """
     pass
 
 
@@ -89,11 +92,8 @@ class SparkSessionManager:
         """
         Validate and retrieve S3/MinIO configuration from environment.
 
-        Returns:
-            Dictionary containing validated MinIO configuration
-
-        Raises:
-            SparkSessionError: If required environment variables are missing or invalid
+        :returns: Dictionary containing validated MinIO configuration
+        :raises SparkSessionError: If required environment variables are missing or invalid
         """
         config = {
             'endpoint': os.getenv("MINIO_ENDPOINT", "localhost:9000"),
@@ -121,9 +121,9 @@ class SparkSessionManager:
 
     @classmethod
     def get_session(
-        cls,
-        app_name: str = "NYC Taxi Data Pipeline",
-        enable_s3: bool = True
+            cls,
+            app_name: str = "NYC Taxi Data Pipeline",
+            enable_s3: bool = True
     ) -> SparkSession:
         """
         Get or create Spark session with optional S3/MinIO configuration.
@@ -131,16 +131,11 @@ class SparkSessionManager:
         This method creates a singleton SparkSession configured for optimal performance
         with MinIO object storage. It applies workarounds for Hadoop 3.4.2+ compatibility.
 
-        Args:
-            app_name: Name of the Spark application (used in logs and UI)
-            enable_s3: Enable S3A filesystem configuration for MinIO/S3 access
-
-        Returns:
-            Configured SparkSession instance (singleton)
-
-        Raises:
-            SparkSessionError: If session creation fails or configuration is invalid
-            ValueError: If app_name is empty
+        :params app_name: Name of the Spark application (used in logs and UI)
+        :params enable_s3: Enable S3A filesystem configuration for MinIO/S3 access
+        :returns SparkSession: Configured SparkSession instance (singleton)
+        :raises SparkSessionError: If session creation fails or configuration is invalid
+        :raises ValueError: If app_name is empty
 
         Note:
             - First call creates the session with specified configuration
@@ -198,7 +193,8 @@ class SparkSessionManager:
                         .config("spark.jars.packages",
                                 "org.apache.hadoop:hadoop-aws:3.4.2,"
                                 "com.amazonaws:aws-java-sdk-bundle:1.12.262,"
-                                "org.apache.hadoop:hadoop-common:3.4.2")
+                                "org.apache.hadoop:hadoop-common:3.4.2,"
+                                "org.postgresql:postgresql:42.7.1")
 
                 cls._instance = builder.getOrCreate()
                 logger.info("SparkSession created successfully")
@@ -234,8 +230,7 @@ class SparkSessionManager:
         any S3A timeout configurations that might have been set with time unit
         strings, replacing them with numeric millisecond values.
 
-        Raises:
-            SparkSessionError: If Hadoop configuration access fails
+        :raises SparkSessionError: If Hadoop configuration access fails
         """
         if cls._instance is None:
             raise SparkSessionError("Cannot apply Hadoop overrides: no active session")
@@ -314,11 +309,8 @@ class SparkSessionManager:
         """
         Get the current session configuration.
 
-        Returns:
-            Dictionary containing session configuration metadata
-
-        Raises:
-            SparkSessionError: If no active session exists
+        :returns: Dictionary containing session configuration metadata
+        :raises SparkSessionError: If no active session exists
         """
         if cls._instance is None:
             raise SparkSessionError("No active SparkSession")
@@ -330,7 +322,6 @@ class SparkSessionManager:
         """
         Check if a SparkSession is currently active.
 
-        Returns:
-            True if session exists and is active, False otherwise
+        :returns: True if session exists and is active, False otherwise
         """
         return cls._instance is not None
