@@ -112,9 +112,12 @@ class PostgresLoadJob(BaseSparkJob):
         self.month = month
 
         # PostgreSQL connection parameters
-        self.postgres_url = postgres_url or os.getenv(
-            "POSTGRES_URL", "jdbc:postgresql://localhost:5432/nyc_taxi"
-        )
+        # Build URL from individual env vars if POSTGRES_URL not set
+        default_host = os.getenv("POSTGRES_HOST", "localhost")
+        default_port = os.getenv("POSTGRES_PORT", "5432")
+        default_db = os.getenv("POSTGRES_DB", "nyc_taxi")
+        default_url = f"jdbc:postgresql://{default_host}:{default_port}/{default_db}"
+        self.postgres_url = postgres_url or os.getenv("POSTGRES_URL", default_url)
         self.postgres_user = postgres_user or os.getenv("POSTGRES_USER", "postgres")
         self.postgres_password = postgres_password or os.getenv(
             "POSTGRES_PASSWORD", "postgres"
