@@ -1,9 +1,7 @@
 name: Deploy Terraform to GCP
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - main
     paths:
@@ -18,7 +16,7 @@ jobs:
   terraform:
     name: Terraform Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     permissions:
       contents: read
       id-token: write
