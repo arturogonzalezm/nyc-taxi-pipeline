@@ -119,3 +119,9 @@ variable "airflow_admin_role" {
   type        = string
   default     = "Admin"
 }
+
+# GitHub Variables
+variable "github_repository" {
+  description = "GitHub repository in format 'owner/repo' for Workload Identity Federation"
+  type        = string
+}
