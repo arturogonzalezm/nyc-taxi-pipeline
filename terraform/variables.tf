@@ -1,6 +1,7 @@
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
+  default     = "nyc-taxi-pipeline"
 }
 
 variable "project_name" {
