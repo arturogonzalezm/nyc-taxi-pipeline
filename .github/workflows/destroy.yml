@@ -1,0 +1,59 @@
+name: Destroy Terraform Infrastructure on GCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "destroy" to confirm infrastructure destruction'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: '1.14.4'
+  WORKING_DIR: './terraform'
+
+jobs:
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm_destroy == 'destroy'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform plan -destroy \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="minio_root_user=${{ secrets.MINIO_ROOT_USER }}" \
+            -var="minio_root_password=${{ secrets.MINIO_ROOT_PASSWORD }}" \
+            -var="minio_access_key=${{ secrets.MINIO_ACCESS_KEY }}" \
+            -var="minio_secret_key=${{ secrets.MINIO_SECRET_KEY }}" \
+            -var="postgres_user=${{ secrets.POSTGRES_USER }}" \
+            -var="postgres_password=${{ secrets.POSTGRES_PASSWORD }}" \
+            -var="airflow_admin_password=${{ secrets.AIRFLOW_ADMIN_PASSWORD }}" \
+            -out=tfplan-destroy
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan-destroy

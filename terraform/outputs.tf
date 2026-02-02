@@ -24,24 +24,14 @@ output "secret_ids" {
   }
 }
 
-output "gcs_bucket_names" {
-  description = "Names of created GCS buckets"
-  value = {
-    bronze  = google_storage_bucket.nyc_taxi_bronze.name
-    silver  = google_storage_bucket.nyc_taxi_silver.name
-    gold    = google_storage_bucket.nyc_taxi_gold.name
-    airflow = google_storage_bucket.nyc_taxi_airflow.name
-  }
+output "gcs_bucket_name" {
+  description = "Name of the GCS bucket"
+  value       = google_storage_bucket.nyc_taxi_pipeline.name
 }
 
-output "gcs_bucket_urls" {
-  description = "URLs of created GCS buckets"
-  value = {
-    bronze  = google_storage_bucket.nyc_taxi_bronze.url
-    silver  = google_storage_bucket.nyc_taxi_silver.url
-    gold    = google_storage_bucket.nyc_taxi_gold.url
-    airflow = google_storage_bucket.nyc_taxi_airflow.url
-  }
+output "gcs_bucket_url" {
+  description = "URL of the GCS bucket"
+  value       = google_storage_bucket.nyc_taxi_pipeline.url
 }
 
 output "iam_roles_assigned" {
@@ -52,4 +42,9 @@ output "iam_roles_assigned" {
     "roles/bigquery.dataEditor",
     "roles/bigquery.jobUser"
   ]
+}
+
+output "service_account_key_secret_id" {
+  description = "Secret ID containing the service account key for local Docker environment"
+  value       = google_secret_manager_secret.sa_key.secret_id
 }
