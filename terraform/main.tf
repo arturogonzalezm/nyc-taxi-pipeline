@@ -54,6 +54,28 @@ resource "google_project_iam_member" "secret_accessor" {
   member  = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
 }
 
+# Service Account Key for local Docker environment
+resource "google_service_account_key" "nyc_taxi_sa_key" {
+  service_account_id = google_service_account.nyc_taxi_sa.name
+}
+
+# Store the service account key in Secret Manager for secure retrieval
+resource "google_secret_manager_secret" "sa_key" {
+  secret_id = "nyc-taxi-sa-key"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+resource "google_secret_manager_secret_version" "sa_key" {
+  secret      = google_secret_manager_secret.sa_key.id
+  secret_data = base64decode(google_service_account_key.nyc_taxi_sa_key.private_key)
+}
+
 # MinIO Secrets
 resource "google_secret_manager_secret" "minio_root_user" {
   secret_id = "minio-root-user"
@@ -334,12 +356,12 @@ resource "google_project_iam_member" "bigquery_job_user" {
 # GOOGLE CLOUD STORAGE (GCS) BUCKETS
 # =============================================================================
 
-# GCS Bucket for raw/bronze data layer
-resource "google_storage_bucket" "nyc_taxi_bronze" {
-  name          = "${var.project_id}-nyc-taxi-bronze"
+# Single GCS Bucket for NYC Taxi Pipeline
+resource "google_storage_bucket" "nyc_taxi_pipeline" {
+  name          = "nyc-taxi-pipeline"
   location      = var.region
   project       = var.project_id
-  force_destroy = false
+  force_destroy = true
 
   uniform_bucket_level_access = true
 
@@ -360,119 +382,14 @@ resource "google_storage_bucket" "nyc_taxi_bronze" {
   labels = {
     environment = "production"
     project     = "nyc-taxi-pipeline"
-    layer       = "bronze"
   }
 
   depends_on = [google_project_service.storage]
 }
 
-# GCS Bucket for processed/silver data layer
-resource "google_storage_bucket" "nyc_taxi_silver" {
-  name          = "${var.project_id}-nyc-taxi-silver"
-  location      = var.region
-  project       = var.project_id
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-
-  lifecycle_rule {
-    condition {
-      age = 180
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "NEARLINE"
-    }
-  }
-
-  labels = {
-    environment = "production"
-    project     = "nyc-taxi-pipeline"
-    layer       = "silver"
-  }
-
-  depends_on = [google_project_service.storage]
-}
-
-# GCS Bucket for analytics/gold data layer
-resource "google_storage_bucket" "nyc_taxi_gold" {
-  name          = "${var.project_id}-nyc-taxi-gold"
-  location      = var.region
-  project       = var.project_id
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-
-  labels = {
-    environment = "production"
-    project     = "nyc-taxi-pipeline"
-    layer       = "gold"
-  }
-
-  depends_on = [google_project_service.storage]
-}
-
-# GCS Bucket for Airflow DAGs and logs
-resource "google_storage_bucket" "nyc_taxi_airflow" {
-  name          = "${var.project_id}-nyc-taxi-airflow"
-  location      = var.region
-  project       = var.project_id
-  force_destroy = false
-
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-
-  lifecycle_rule {
-    condition {
-      age = 30
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "NEARLINE"
-    }
-  }
-
-  labels = {
-    environment = "production"
-    project     = "nyc-taxi-pipeline"
-    component   = "airflow"
-  }
-
-  depends_on = [google_project_service.storage]
-}
-
-# IAM binding for service account to access buckets
-resource "google_storage_bucket_iam_member" "bronze_bucket_access" {
-  bucket = google_storage_bucket.nyc_taxi_bronze.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
-}
-
-resource "google_storage_bucket_iam_member" "silver_bucket_access" {
-  bucket = google_storage_bucket.nyc_taxi_silver.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
-}
-
-resource "google_storage_bucket_iam_member" "gold_bucket_access" {
-  bucket = google_storage_bucket.nyc_taxi_gold.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
-}
-
-resource "google_storage_bucket_iam_member" "airflow_bucket_access" {
-  bucket = google_storage_bucket.nyc_taxi_airflow.name
+# IAM binding for service account to access bucket
+resource "google_storage_bucket_iam_member" "pipeline_bucket_access" {
+  bucket = google_storage_bucket.nyc_taxi_pipeline.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
 }
