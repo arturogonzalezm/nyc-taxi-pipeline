@@ -133,6 +133,138 @@ pip install -e ".[dev]"
 python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type yellow --year 2024 --month 1
 ```
 
+## Complete ETL Commands Reference (Docker)
+
+All commands below assume you are inside the ETL container (`docker exec -it nyc-taxi-etl bash`).
+
+### Bronze Layer - Data Ingestion
+
+#### Taxi Trip Data Ingestion
+
+```bash
+# Single month ingestion (yellow taxi)
+python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type yellow --year 2024 --month 1
+
+# Single month ingestion (green taxi)
+python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type green --year 2024 --month 1
+
+# Bulk ingestion - date range
+python -m etl.jobs.bronze.taxi_ingestion_job \
+    --taxi-type yellow \
+    --start-year 2023 --start-month 1 \
+    --end-year 2023 --end-month 12
+
+# Show help for all options
+python -m etl.jobs.bronze.taxi_ingestion_job --help
+```
+
+#### Zone Lookup Reference Data
+
+```bash
+# Ingest taxi zone lookup (required for dim_location)
+python -m etl.jobs.bronze.zone_lookup_ingestion_job
+```
+
+#### Safe Backfill (Re-processing Historical Data)
+
+```bash
+# Backfill specific months
+python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2023-03 2023-07
+
+# Backfill a date range
+python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2023-01:2023-12
+
+# Backfill without deleting existing data
+python etl/jobs/bronze/taxi_injection_safe_backfill_job.py yellow 2024-01 --no-delete
+```
+
+### Gold Layer - Transformation
+
+```bash
+# Transform single month to dimensional model
+python -m etl.jobs.gold.taxi_gold_job --taxi-type yellow --year 2024 --month 1
+
+# Transform date range
+python -m etl.jobs.gold.taxi_gold_job \
+    --taxi-type yellow \
+    --year 2023 --month 1 \
+    --end-year 2023 --end-month 6
+
+# Green taxi transformation
+python -m etl.jobs.gold.taxi_gold_job --taxi-type green --year 2024 --month 1
+
+# Show help for all options
+python -m etl.jobs.gold.taxi_gold_job --help
+```
+
+### Load Layer - PostgreSQL
+
+```bash
+# Load all data for a taxi type
+python -m etl.jobs.load.postgres_load_job --taxi-type yellow
+
+# Load specific month
+python -m etl.jobs.load.postgres_load_job --taxi-type yellow --year 2024 --month 1
+
+# Load green taxi data
+python -m etl.jobs.load.postgres_load_job --taxi-type green
+
+# Show help for all options
+python -m etl.jobs.load.postgres_load_job --help
+```
+
+### Full Pipeline Example
+
+Run the complete pipeline for January 2024 yellow taxi data:
+
+```bash
+# Enter container
+docker exec -it nyc-taxi-etl bash
+
+# Step 1: Ingest zone lookup (one-time setup)
+python -m etl.jobs.bronze.zone_lookup_ingestion_job
+
+# Step 2: Ingest taxi trip data
+python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type yellow --year 2024 --month 1
+
+# Step 3: Transform to dimensional model
+python -m etl.jobs.gold.taxi_gold_job --taxi-type yellow --year 2024 --month 1
+
+# Step 4: Load to PostgreSQL
+python -m etl.jobs.load.postgres_load_job --taxi-type yellow --year 2024 --month 1
+```
+
+### Running Jobs Without Entering Container
+
+You can run jobs directly from the host using `docker-compose exec` or `docker exec`:
+
+```bash
+# Bulk ingestion (Jan-Nov 2025)
+docker-compose exec etl python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type yellow --start-year 2025 --start-month 1 --end-year 2025 --end-month 11
+
+# Zone lookup ingestion
+docker-compose exec etl python -m etl.jobs.bronze.zone_lookup_ingestion_job
+
+# Gold transformation (date range)
+docker-compose exec etl python etl/jobs/gold/taxi_gold_job.py --taxi-type yellow --year 2025 --month 1 --end-year 2025 --end-month 11
+
+# Load to PostgreSQL
+docker-compose exec etl python etl/jobs/load/postgres_load_job.py --taxi-type yellow
+```
+
+Alternative using `docker exec`:
+
+```bash
+# Ingestion
+docker exec nyc-taxi-etl python -m etl.jobs.bronze.taxi_ingestion_job --taxi-type yellow --year 2024 --month 1
+
+# Transformation
+docker exec nyc-taxi-etl python -m etl.jobs.gold.taxi_gold_job --taxi-type yellow --year 2024 --month 1
+
+# Load
+docker exec nyc-taxi-etl python -m etl.jobs.load.postgres_load_job --taxi-type yellow --year 2024 --month 1
+```
+
 ## Environment Variables
 
 The `.env` file contains configuration:
