@@ -1,4 +1,5 @@
 """Unit tests for postgres_load_dag.py"""
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -11,6 +12,7 @@ class TestPostgresLoadDag:
     def dag(self):
         """Load the DAG for testing."""
         from dags.postgres_load_dag import dag
+
         return dag
 
     def test_dag_id(self, dag):
@@ -76,7 +78,7 @@ class TestPostgresLoadDag:
         """Test load task exists and has required attributes."""
         task = dag.get_task("load_to_postgres")
         assert task is not None
-        assert hasattr(task, 'bash_command')
+        assert hasattr(task, "bash_command")
 
     def test_load_task_bash_command_contains_module(self, dag):
         """Test bash command references correct module."""

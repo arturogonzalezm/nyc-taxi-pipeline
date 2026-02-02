@@ -1,4 +1,5 @@
 """Unit tests for taxi_gold_dag.py"""
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -11,6 +12,7 @@ class TestTaxiGoldDag:
     def dag(self):
         """Load the DAG for testing."""
         from dags.taxi_gold_dag import dag
+
         return dag
 
     def test_dag_id(self, dag):
@@ -19,7 +21,10 @@ class TestTaxiGoldDag:
 
     def test_dag_description(self, dag):
         """Test DAG has correct description."""
-        assert dag.description == "Transform taxi data from Bronze to Gold layer (dimensional model)"
+        assert (
+            dag.description
+            == "Transform taxi data from Bronze to Gold layer (dimensional model)"
+        )
 
     def test_dag_schedule(self, dag):
         """Test DAG has no schedule (manual trigger only)."""
@@ -84,7 +89,7 @@ class TestTaxiGoldDag:
         """Test transform task exists and has required attributes."""
         task = dag.get_task("transform_to_gold")
         assert task is not None
-        assert hasattr(task, 'bash_command')
+        assert hasattr(task, "bash_command")
 
     def test_transform_task_bash_command_contains_module(self, dag):
         """Test bash command references correct module."""

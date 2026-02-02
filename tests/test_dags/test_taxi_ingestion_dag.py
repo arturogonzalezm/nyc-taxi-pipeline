@@ -1,4 +1,5 @@
 """Unit tests for taxi_ingestion_dag.py"""
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -11,6 +12,7 @@ class TestTaxiIngestionDag:
     def dag(self):
         """Load the DAG for testing."""
         from dags.taxi_ingestion_dag import dag
+
         return dag
 
     def test_dag_id(self, dag):
@@ -92,7 +94,7 @@ class TestTaxiIngestionDag:
         """Test ingest task exists and has required attributes."""
         task = dag.get_task("ingest_taxi_data")
         assert task is not None
-        assert hasattr(task, 'bash_command')
+        assert hasattr(task, "bash_command")
 
     def test_ingest_task_bash_command_contains_module(self, dag):
         """Test bash command references correct module."""

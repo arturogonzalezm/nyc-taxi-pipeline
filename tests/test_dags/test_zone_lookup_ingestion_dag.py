@@ -1,4 +1,5 @@
 """Unit tests for zone_lookup_ingestion_dag.py"""
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -11,6 +12,7 @@ class TestZoneLookupIngestionDag:
     def dag(self):
         """Load the DAG for testing."""
         from dags.zone_lookup_ingestion_dag import dag
+
         return dag
 
     def test_dag_id(self, dag):
@@ -19,7 +21,9 @@ class TestZoneLookupIngestionDag:
 
     def test_dag_description(self, dag):
         """Test DAG has correct description."""
-        assert dag.description == "Ingest taxi zone lookup reference data to Bronze layer"
+        assert (
+            dag.description == "Ingest taxi zone lookup reference data to Bronze layer"
+        )
 
     def test_dag_schedule(self, dag):
         """Test DAG has no schedule (manual trigger only)."""
@@ -70,7 +74,7 @@ class TestZoneLookupIngestionDag:
         """Test ingest task exists and has required attributes."""
         task = dag.get_task("ingest_zone_lookup")
         assert task is not None
-        assert hasattr(task, 'bash_command')
+        assert hasattr(task, "bash_command")
 
     def test_ingest_task_bash_command_contains_module(self, dag):
         """Test bash command references correct module."""
