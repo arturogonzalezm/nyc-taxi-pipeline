@@ -1,7 +1,9 @@
 name: Deploy Terraform to GCP
 
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - main
     paths:
@@ -52,6 +54,6 @@ jobs:
         run: terraform plan -var="project_id=${{ secrets.GCP_PROJECT_ID }}" -out=tfplan
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.event.pull_request.merged == true
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
