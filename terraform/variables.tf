@@ -1,7 +1,17 @@
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
-  default     = "nyc-taxi-pipeline-486213"
+}
+
+variable "project_name" {
+  description = "GCP Project display name"
+  type        = string
+  default     = "NYC Taxi Pipeline"
+}
+
+variable "billing_account_id" {
+  description = "GCP Billing Account ID"
+  type        = string
 }
 
 variable "region" {

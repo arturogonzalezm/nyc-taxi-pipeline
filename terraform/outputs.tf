@@ -1,3 +1,13 @@
+output "project_id" {
+  description = "The GCP project ID"
+  value       = google_project.nyc_taxi_project.project_id
+}
+
+output "project_number" {
+  description = "The GCP project number"
+  value       = google_project.nyc_taxi_project.number
+}
+
 output "service_account_email" {
   description = "Email of the NYC Taxi service account"
   value       = google_service_account.nyc_taxi_sa.email

@@ -14,12 +14,30 @@ provider "google" {
   region  = var.region
 }
 
+# =============================================================================
+# GCP PROJECT
+# =============================================================================
+
+# Create the GCP Project
+resource "google_project" "nyc_taxi_project" {
+  name            = var.project_name
+  project_id      = var.project_id
+  billing_account = var.billing_account_id
+
+  labels = {
+    environment = "production"
+    project     = "nyc-taxi-pipeline"
+  }
+}
+
 # Enable IAM Service Account Credentials API (required for Workload Identity Federation)
 resource "google_project_service" "iamcredentials" {
   project = var.project_id
   service = "iamcredentials.googleapis.com"
 
   disable_on_destroy = false
+
+  depends_on = [google_project.nyc_taxi_project]
 }
 
 # Enable Service Usage API (required for listing/managing project services)
@@ -28,6 +46,8 @@ resource "google_project_service" "serviceusage" {
   service = "serviceusage.googleapis.com"
 
   disable_on_destroy = false
+
+  depends_on = [google_project.nyc_taxi_project]
 }
 
 # Enable Secret Manager API
