@@ -358,7 +358,7 @@ resource "google_project_iam_member" "bigquery_job_user" {
 
 # Single GCS Bucket for NYC Taxi Pipeline
 resource "google_storage_bucket" "nyc_taxi_pipeline" {
-  name          = "nyc-taxi-pipeline"
+  name          = "${var.project_id}-nyc-taxi-pipeline"
   location      = var.region
   project       = var.project_id
   force_destroy = true
