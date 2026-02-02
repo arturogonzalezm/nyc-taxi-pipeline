@@ -14,12 +14,30 @@ provider "google" {
   region  = var.region
 }
 
+# Enable IAM Service Account Credentials API (required for Workload Identity Federation)
+resource "google_project_service" "iamcredentials" {
+  project = var.project_id
+  service = "iamcredentials.googleapis.com"
+
+  disable_on_destroy = false
+}
+
+# Enable Service Usage API (required for listing/managing project services)
+resource "google_project_service" "serviceusage" {
+  project = var.project_id
+  service = "serviceusage.googleapis.com"
+
+  disable_on_destroy = false
+}
+
 # Enable Secret Manager API
 resource "google_project_service" "secretmanager" {
   project = var.project_id
   service = "secretmanager.googleapis.com"
 
   disable_on_destroy = false
+
+  depends_on = [google_project_service.iamcredentials, google_project_service.serviceusage]
 }
 
 # Service Account for accessing secrets
