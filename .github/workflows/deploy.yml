@@ -60,6 +60,7 @@ jobs:
           terraform plan \
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="billing_account_id=${{ secrets.GCP_BILLING_ACCOUNT_ID }}" \
+            -var="github_repository=${{ github.repository }}" \
             -var="minio_root_user=${{ secrets.MINIO_ROOT_USER }}" \
             -var="minio_root_password=${{ secrets.MINIO_ROOT_PASSWORD }}" \
             -var="minio_access_key=${{ secrets.MINIO_ACCESS_KEY }}" \

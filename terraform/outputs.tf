@@ -58,3 +58,14 @@ output "service_account_key_secret_id" {
   description = "Secret ID containing the service account key for local Docker environment"
   value       = google_secret_manager_secret.sa_key.secret_id
 }
+
+# Workload Identity Federation outputs for GitHub Actions
+output "workload_identity_provider" {
+  description = "Workload Identity Provider resource name (use this for GCP_WORKLOAD_IDENTITY_PROVIDER secret)"
+  value       = google_iam_workload_identity_pool_provider.github_provider.name
+}
+
+output "workload_identity_pool" {
+  description = "Workload Identity Pool resource name"
+  value       = google_iam_workload_identity_pool.github_pool.name
+}

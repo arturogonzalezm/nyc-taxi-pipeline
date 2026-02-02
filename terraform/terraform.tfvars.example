@@ -1,7 +1,11 @@
 # GCP Configuration
-project_id = "your-gcp-project-id"
-region     = "us-central1"
-zone       = "us-central1-a"
+project_id         = "your-gcp-project-id"
+billing_account_id = "your-billing-account-id"
+region             = "us-central1"
+zone               = "us-central1-a"
+
+# GitHub Configuration (for Workload Identity Federation)
+github_repository = "your-org/your-repo"  # e.g., "myorg/nyc-taxi-pipeline"
 
 # MinIO Configuration
 # These values should be provided via GitHub Secrets or environment variables
