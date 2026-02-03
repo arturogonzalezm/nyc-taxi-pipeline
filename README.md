@@ -121,8 +121,10 @@ make up
 ```
 
 Services available:
-- MinIO API: http://localhost:9000
-- MinIO Console: http://localhost:9001
+
+[//]: # (- MinIO API: http://localhost:9000)
+
+[//]: # (- MinIO Console: http://localhost:9001)
 - PostgreSQL: localhost:5432
 
 ### 3. Run the Pipeline
