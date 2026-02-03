@@ -1,7 +1,13 @@
 variable "project_id" {
-  description = "GCP Project ID"
+  description = "Base name for the GCP Project ID"
   type        = string
-  default     = "nyc-taxi-pipeline-001"
+  default     = "nyc-taxi-pipeline"
+}
+
+variable "instance_number" {
+  description = "Instance number (01, 02, etc.)"
+  type        = string
+  default     = "01"
 }
 
 variable "project_name" {
@@ -13,6 +19,7 @@ variable "project_name" {
 variable "billing_account_id" {
   description = "GCP Billing Account ID"
   type        = string
+  sensitive   = true
 }
 
 variable "region" {
@@ -28,7 +35,7 @@ variable "zone" {
 }
 
 variable "environment" {
-  description = "Environment name (dev, staging, prod)"
+  description = "Environment name (dev, prod)"
   type        = string
   default     = "dev"
 }
@@ -43,4 +50,9 @@ variable "bucket_suffix" {
 variable "github_repository" {
   description = "GitHub repository in format 'owner/repo' for Workload Identity Federation"
   type        = string
+}
+
+# Construct the full project ID
+locals {
+  project_id = "${var.project_id}-${var.environment}-${var.instance_number}"
 }
