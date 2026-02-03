@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 env:
-  TF_VERSION: '1.14.4'
+  TF_VERSION: '1.5.0'
   WORKING_DIR: './terraform'
 
 jobs:
@@ -34,8 +34,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
