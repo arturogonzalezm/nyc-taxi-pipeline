@@ -17,6 +17,7 @@ Tests cover uncovered methods:
 - run_gold_job
 """
 
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import date
@@ -158,6 +159,50 @@ class TestTaxiGoldJobExtractZoneLookup:
                 job._extract_zone_lookup()
 
         assert "zone lookup" in str(exc_info.value).lower()
+
+    def test_extract_zone_lookup_gcs_path(self):
+        """Test zone lookup uses GCS path when STORAGE_BACKEND=gcs."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "gcs"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            mock_spark_read = MagicMock()
+            mock_spark_read.option.return_value = mock_spark_read
+            mock_spark_read.csv.return_value = mock_df
+
+            with patch.object(job, "spark") as mock_spark:
+                mock_spark.read = mock_spark_read
+                result = job._extract_zone_lookup()
+
+            # Verify GCS path was used
+            call_args = mock_spark_read.csv.call_args
+            assert "gs://" in call_args[0][0]
+            assert result is mock_df
+
+    def test_extract_zone_lookup_minio_path(self):
+        """Test zone lookup uses MinIO path when STORAGE_BACKEND=minio."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "minio"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            mock_spark_read = MagicMock()
+            mock_spark_read.option.return_value = mock_spark_read
+            mock_spark_read.csv.return_value = mock_df
+
+            with patch.object(job, "spark") as mock_spark:
+                mock_spark.read = mock_spark_read
+                result = job._extract_zone_lookup()
+
+            # Verify S3A path was used
+            call_args = mock_spark_read.csv.call_args
+            assert "s3a://" in call_args[0][0]
+            assert result is mock_df
 
 
 class TestTaxiGoldJobTransform:
@@ -339,6 +384,29 @@ class TestTaxiGoldJobLoad:
     def setup_method(self):
         """Reset JobConfig singleton before each test."""
         JobConfig.reset()
+
+    def test_load_skips_when_cloud_storage_disabled(self):
+        """Test load returns early when both GCS and MinIO are disabled."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "local"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+            # Disable both GCS and MinIO
+            job.config._storage_backend = "local"
+            job.config.minio.use_minio = False
+
+            dimensional_model = {
+                "dim_date": MagicMock(),
+                "dim_location": MagicMock(),
+                "dim_payment": MagicMock(),
+                "fact_trip": MagicMock(),
+            }
+
+            # Should return early without writing
+            job.load(dimensional_model)
+
+            # Verify no write operations occurred
+            for table_name, mock_df in dimensional_model.items():
+                assert not mock_df.write.called
 
     def test_load_writes_all_tables(self):
         """Test load writes all dimensional model tables."""

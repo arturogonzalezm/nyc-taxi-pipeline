@@ -35,6 +35,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from minio import Minio
 from minio.error import S3Error
+from google.cloud import storage as gcs_storage
 
 from ..base_job import BaseSparkJob, JobExecutionError
 from ..utils.config import JobConfig
@@ -221,28 +222,50 @@ class ZoneLookupIngestionJob(BaseSparkJob):
 
     def load(self, df: DataFrame):
         """
-        Load zone lookup data to MinIO misc layer as raw CSV file.
+        Load zone lookup data to cloud storage (GCS or MinIO) misc layer as raw CSV file.
 
-        This method uploads the raw CSV file (not the DataFrame) to MinIO
+        This method uploads the raw CSV file (not the DataFrame) to cloud storage
         to preserve the original format and ensure maximum compatibility.
         :params df: Validated DataFrame (used for record count only)
         :raises FileNotFoundError: If local cache file doesn't exist
-        :raises JobExecutionError: If MinIO upload fails
+        :raises JobExecutionError: If cloud storage upload fails
         """
         record_count = df.count()
         self.logger.info(f"Validated {record_count:,} zone records, preparing upload")
 
-        if self.config.minio.use_minio:
-            # Get the local cached file
-            cache_path = Path(self.config.cache_dir)
-            local_file = cache_path / self.file_name
+        # Get the local cached file
+        cache_path = Path(self.config.cache_dir)
+        local_file = cache_path / self.file_name
 
-            if not local_file.exists():
-                raise FileNotFoundError(
-                    f"Local file not found: {local_file}. "
-                    "Cannot upload to MinIO without cached file."
+        if not local_file.exists():
+            raise FileNotFoundError(
+                f"Local file not found: {local_file}. "
+                "Cannot upload to cloud storage without cached file."
+            )
+
+        if self.config.use_gcs:
+            # Upload to Google Cloud Storage
+            try:
+                gcs_client = gcs_storage.Client(project=self.config.gcs.project_id)
+                bucket = gcs_client.bucket(self.config.gcs.bucket)
+                blob = bucket.blob(self.MINIO_OBJECT_PATH)
+
+                self.logger.info(
+                    f"Uploading {local_file} to gs://{self.config.gcs.bucket}/{self.MINIO_OBJECT_PATH}"
                 )
 
+                blob.upload_from_filename(str(local_file), content_type="text/csv")
+
+                self.logger.info(f"Successfully uploaded {self.file_name} to GCS")
+                self.logger.info(
+                    f"GCS path: gs://{self.config.gcs.bucket}/{self.MINIO_OBJECT_PATH}"
+                )
+
+            except Exception as e:
+                self.logger.error(f"GCS upload error: {e}")
+                raise JobExecutionError(f"Failed to upload to GCS: {e}") from e
+
+        elif self.config.minio.use_minio:
             # Upload raw CSV file directly to MinIO
             try:
                 minio_client = self._get_minio_client()
@@ -275,10 +298,12 @@ class ZoneLookupIngestionJob(BaseSparkJob):
                 self.logger.error(f"Error uploading to MinIO: {e}")
                 raise JobExecutionError(f"MinIO upload failed: {e}") from e
         else:
-            # If not using MinIO, just keep it in cache
+            # If not using cloud storage, just keep it in cache
             cache_file_path = Path(self.config.cache_dir) / self.file_name
             self.logger.info(f"File available in local cache: {cache_file_path}")
-            self.logger.info("MinIO upload skipped (USE_MINIO=false)")
+            self.logger.info(
+                "Cloud storage upload skipped (STORAGE_BACKEND not configured)"
+            )
 
     def _get_minio_client(self) -> Minio:
         """

@@ -107,6 +107,52 @@ class TestPostgresLoadJobTransform:
         assert hasattr(job, "transform")
         assert callable(job.transform)
 
+    def test_transform_adds_metadata_columns(self):
+        """Test transform adds postgres load metadata columns."""
+        job = PostgresLoadJob("yellow")
+
+        mock_df = MagicMock()
+        mock_df.withColumn.return_value = mock_df
+        mock_df.count.return_value = 100
+
+        dimensional_model = {
+            "dim_date": mock_df,
+            "dim_location": mock_df,
+            "dim_payment": mock_df,
+            "fact_trip": mock_df,
+        }
+
+        with patch("etl.jobs.load.postgres_load_job.F") as mock_F:
+            mock_F.current_timestamp.return_value = "mock_timestamp"
+            mock_F.current_date.return_value = "mock_date"
+            mock_F.lit.return_value = "mock_lit"
+            result = job.transform(dimensional_model)
+
+        # Verify all tables are in result
+        assert "dim_date" in result
+        assert "dim_location" in result
+        assert "dim_payment" in result
+        assert "fact_trip" in result
+
+    def test_transform_returns_enriched_model(self):
+        """Test transform returns dictionary with enriched DataFrames."""
+        job = PostgresLoadJob("yellow")
+
+        mock_df = MagicMock()
+        mock_df.withColumn.return_value = mock_df
+        mock_df.count.return_value = 50
+
+        dimensional_model = {"fact_trip": mock_df}
+
+        with patch("etl.jobs.load.postgres_load_job.F") as mock_F:
+            mock_F.current_timestamp.return_value = "mock_timestamp"
+            mock_F.current_date.return_value = "mock_date"
+            mock_F.lit.return_value = "mock_lit"
+            result = job.transform(dimensional_model)
+
+        assert isinstance(result, dict)
+        assert "fact_trip" in result
+
 
 class TestPostgresLoadJobLoad:
     """Tests for load method."""

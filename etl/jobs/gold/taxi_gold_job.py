@@ -346,12 +346,19 @@ class TaxiGoldJob(BaseSparkJob):
 
     def _extract_zone_lookup(self) -> DataFrame:
         """
-        Extract zone lookup reference data from MinIO.
+        Extract zone lookup reference data from cloud storage (GCS or MinIO).
 
         :returns: DataFrame with zone lookup data
         """
         # Zone lookup is stored as CSV in misc directory
-        zone_lookup_path = f"s3a://{self.config.minio.bucket}/misc/taxi_zone_lookup.csv"
+        if self.config.use_gcs:
+            zone_lookup_path = (
+                f"gs://{self.config.gcs.bucket}/misc/taxi_zone_lookup.csv"
+            )
+        else:
+            zone_lookup_path = (
+                f"s3a://{self.config.minio.bucket}/misc/taxi_zone_lookup.csv"
+            )
         self.logger.info(f"Reading zone lookup: {zone_lookup_path}")
 
         try:
@@ -976,7 +983,7 @@ class TaxiGoldJob(BaseSparkJob):
 
     def load(self, dimensional_model: dict):
         """
-        Load dimensional model to gold layer in MinIO.
+        Load dimensional model to gold layer in cloud storage (GCS or MinIO).
 
         Writes fact and dimension tables as parquet files.
         Uses partition overwrite mode for fact table to avoid duplicates.
@@ -993,11 +1000,11 @@ class TaxiGoldJob(BaseSparkJob):
 
         :params dimensional_model: Dictionary with fact and dimension DataFrames
         """
-        if not self.config.minio.use_minio:
-            self.logger.warning("MinIO disabled, skipping gold layer load")
+        if not self.config.use_gcs and not self.config.minio.use_minio:
+            self.logger.warning("Cloud storage disabled, skipping gold layer load")
             return
 
-        gold_base_path = self.config.get_s3_path("gold", taxi_type=self.taxi_type)
+        gold_base_path = self.config.get_storage_path("gold", taxi_type=self.taxi_type)
         self.logger.info(f"Writing dimensional model to gold layer: {gold_base_path}")
 
         # Write fact table (partitioned with dynamic partition overwrite)

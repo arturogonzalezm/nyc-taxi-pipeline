@@ -10,6 +10,7 @@ Tests cover uncovered methods:
 - run_zone_lookup_ingestion
 """
 
+import os
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
@@ -223,15 +224,71 @@ class TestZoneLookupIngestionJobLoad:
         assert "MinIO upload failed" in str(exc_info.value)
 
     def test_load_local_only(self):
-        """Test load keeps file locally when MinIO disabled."""
-        job = ZoneLookupIngestionJob()
-        job.config.minio.use_minio = False
+        """Test load keeps file locally when neither GCS nor MinIO enabled."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "minio"}):
+            JobConfig.reset()
+            job = ZoneLookupIngestionJob()
+            # Disable both GCS and MinIO to hit the local-only else branch
+            job.config._storage_backend = "local"
+            job.config.minio.use_minio = False
 
-        mock_df = MagicMock()
-        mock_df.count.return_value = 265
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
 
-        # Should not raise, just log
-        job.load(mock_df)
+            # Should not raise, just log
+            with patch("pathlib.Path.exists", return_value=True):
+                job.load(mock_df)
+
+
+class TestZoneLookupIngestionJobLoadGCS:
+    """Tests for load method with GCS backend."""
+
+    def setup_method(self):
+        """Reset JobConfig singleton before each test."""
+        JobConfig.reset()
+
+    def test_load_gcs_success(self):
+        """Test successful upload to GCS."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "gcs"}):
+            JobConfig.reset()
+            job = ZoneLookupIngestionJob()
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            mock_gcs_client = MagicMock()
+            mock_bucket = MagicMock()
+            mock_blob = MagicMock()
+            mock_gcs_client.bucket.return_value = mock_bucket
+            mock_bucket.blob.return_value = mock_blob
+
+            with patch(
+                "etl.jobs.bronze.zone_lookup_ingestion_job.gcs_storage.Client",
+                return_value=mock_gcs_client,
+            ):
+                with patch("pathlib.Path.exists", return_value=True):
+                    job.load(mock_df)
+
+            mock_blob.upload_from_filename.assert_called_once()
+
+    def test_load_gcs_failure(self):
+        """Test GCS upload failure raises JobExecutionError."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "gcs"}):
+            JobConfig.reset()
+            job = ZoneLookupIngestionJob()
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            with patch(
+                "etl.jobs.bronze.zone_lookup_ingestion_job.gcs_storage.Client",
+                side_effect=Exception("GCS error"),
+            ):
+                with patch("pathlib.Path.exists", return_value=True):
+                    with pytest.raises(JobExecutionError) as exc_info:
+                        job.load(mock_df)
+
+            assert "Failed to upload to GCS" in str(exc_info.value)
 
 
 class TestZoneLookupIngestionJobGetMinioClient:
