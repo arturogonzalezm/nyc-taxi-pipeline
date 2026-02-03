@@ -1,4 +1,4 @@
-name: Destroy Terraform on GCP
+name: Destroy Infrastructure in GCP
 
 on:
   workflow_dispatch:
