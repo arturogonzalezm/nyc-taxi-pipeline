@@ -110,7 +110,9 @@ class TestSparkSessionManagerGCSConfiguration:
                     SparkSessionManager.get_session("TestGCSApp", enable_s3=True)
 
                     # Verify GCS-related config was called
-                    config_calls = [str(call) for call in mock_builder.config.call_args_list]
+                    config_calls = [
+                        str(call) for call in mock_builder.config.call_args_list
+                    ]
                     config_str = " ".join(config_calls)
                     assert "fs.gs.impl" in config_str or "gcs" in config_str.lower()
         finally:
@@ -175,7 +177,9 @@ class TestSparkSessionManagerGCSConfiguration:
                     SparkSessionManager.get_session("TestMinIOApp", enable_s3=True)
 
                     # Verify S3A config was called (MinIO path)
-                    config_calls = [str(call) for call in mock_builder.config.call_args_list]
+                    config_calls = [
+                        str(call) for call in mock_builder.config.call_args_list
+                    ]
                     config_str = " ".join(config_calls)
                     assert "s3a" in config_str.lower() or "fs.s3a" in config_str
         finally:

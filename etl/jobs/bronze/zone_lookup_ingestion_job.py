@@ -301,7 +301,9 @@ class ZoneLookupIngestionJob(BaseSparkJob):
             # If not using cloud storage, just keep it in cache
             cache_file_path = Path(self.config.cache_dir) / self.file_name
             self.logger.info(f"File available in local cache: {cache_file_path}")
-            self.logger.info("Cloud storage upload skipped (STORAGE_BACKEND not configured)")
+            self.logger.info(
+                "Cloud storage upload skipped (STORAGE_BACKEND not configured)"
+            )
 
     def _get_minio_client(self) -> Minio:
         """

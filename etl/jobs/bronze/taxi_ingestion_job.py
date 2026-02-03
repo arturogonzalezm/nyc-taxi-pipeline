@@ -465,7 +465,9 @@ class TaxiIngestionJob(BaseSparkJob):
         record_count = df.count()
 
         if self.config.use_gcs or self.config.minio.use_minio:
-            storage_path = self.config.get_storage_path("bronze", taxi_type=self.taxi_type)
+            storage_path = self.config.get_storage_path(
+                "bronze", taxi_type=self.taxi_type
+            )
             backend_name = "GCS" if self.config.use_gcs else "MinIO"
             self.logger.info(
                 f"Writing {record_count:,} records to {backend_name} bronze layer: {storage_path}"
@@ -480,7 +482,9 @@ class TaxiIngestionJob(BaseSparkJob):
             self.logger.info(
                 f"Successfully loaded {record_count:,} records to bronze layer"
             )
-            self.logger.info(f"Path: {storage_path}/year={self.year}/month={self.month}/")
+            self.logger.info(
+                f"Path: {storage_path}/year={self.year}/month={self.month}/"
+            )
         else:
             # If not using cloud storage, save locally with partitioning
             output_path = f"{self.config.cache_dir}/output/{self.taxi_type}"

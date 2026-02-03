@@ -352,9 +352,13 @@ class TaxiGoldJob(BaseSparkJob):
         """
         # Zone lookup is stored as CSV in misc directory
         if self.config.use_gcs:
-            zone_lookup_path = f"gs://{self.config.gcs.bucket}/misc/taxi_zone_lookup.csv"
+            zone_lookup_path = (
+                f"gs://{self.config.gcs.bucket}/misc/taxi_zone_lookup.csv"
+            )
         else:
-            zone_lookup_path = f"s3a://{self.config.minio.bucket}/misc/taxi_zone_lookup.csv"
+            zone_lookup_path = (
+                f"s3a://{self.config.minio.bucket}/misc/taxi_zone_lookup.csv"
+            )
         self.logger.info(f"Reading zone lookup: {zone_lookup_path}")
 
         try:

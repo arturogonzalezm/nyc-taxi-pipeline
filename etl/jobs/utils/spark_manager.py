@@ -186,7 +186,9 @@ class SparkSessionManager:
                 # Configure for GCS access
                 if storage_backend == "gcs":
                     gcs_project = os.getenv("GCP_PROJECT_ID", "nyc-taxi-pipeline-001")
-                    logger.info(f"Configuring Spark for GCS with project: {gcs_project}")
+                    logger.info(
+                        f"Configuring Spark for GCS with project: {gcs_project}"
+                    )
 
                     # GCS configuration using the GCS connector
                     builder = (

@@ -56,7 +56,9 @@ class GCSConfig:
     """
 
     bucket: str = field(
-        default_factory=lambda: os.getenv("GCS_BUCKET", "nyc-taxi-dev-etl-us-central1-01")
+        default_factory=lambda: os.getenv(
+            "GCS_BUCKET", "nyc-taxi-dev-etl-us-central1-01"
+        )
     )
     project_id: str = field(
         default_factory=lambda: os.getenv("GCP_PROJECT_ID", "nyc-taxi-pipeline-001")
@@ -206,7 +208,7 @@ class JobConfig:
     ) -> str:
         """
         Get S3 path for given layer and taxi type.
-        
+
         DEPRECATED: Use get_storage_path() instead for GCS/MinIO compatibility.
 
         Args:
