@@ -2,12 +2,22 @@
 # GCP PROJECT
 # =============================================================================
 
+# Enable Cloud Resource Manager API (required for project operations)
+resource "google_project_service" "cloudresourcemanager" {
+  project = var.project_id
+  service = "cloudresourcemanager.googleapis.com"
+
+  disable_on_destroy = false
+}
+
 # Enable Cloud Billing API (required before creating projects with billing)
 resource "google_project_service" "cloudbilling" {
   project = var.project_id
   service = "cloudbilling.googleapis.com"
 
   disable_on_destroy = false
+
+  depends_on = [google_project_service.cloudresourcemanager]
 }
 
 # Create the GCP Project
