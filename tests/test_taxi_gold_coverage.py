@@ -385,6 +385,29 @@ class TestTaxiGoldJobLoad:
         """Reset JobConfig singleton before each test."""
         JobConfig.reset()
 
+    def test_load_skips_when_cloud_storage_disabled(self):
+        """Test load returns early when both GCS and MinIO are disabled."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "local"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+            # Disable both GCS and MinIO
+            job.config._storage_backend = "local"
+            job.config.minio.use_minio = False
+
+            dimensional_model = {
+                "dim_date": MagicMock(),
+                "dim_location": MagicMock(),
+                "dim_payment": MagicMock(),
+                "fact_trip": MagicMock(),
+            }
+
+            # Should return early without writing
+            job.load(dimensional_model)
+
+            # Verify no write operations occurred
+            for table_name, mock_df in dimensional_model.items():
+                assert not mock_df.write.called
+
     def test_load_writes_all_tables(self):
         """Test load writes all dimensional model tables."""
         job = TaxiGoldJob("yellow", 2024, 1)
