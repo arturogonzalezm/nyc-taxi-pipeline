@@ -221,3 +221,6 @@ terraform/terraform.tfstate.backup
 #terraform/terraform.tfvars
 *.tfvars
 !terraform.tfvars.example
+# GCP Service Account Keys (sensitive)
+terraform/*.json
+terraform/nyc-taxi-pipeline-*.json
