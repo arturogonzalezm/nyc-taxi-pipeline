@@ -231,7 +231,8 @@ class TestZoneLookupIngestionJobLoad:
         mock_df.count.return_value = 265
 
         # Should not raise, just log
-        job.load(mock_df)
+        with patch("pathlib.Path.exists", return_value=True):
+            job.load(mock_df)
 
 
 class TestZoneLookupIngestionJobGetMinioClient:

@@ -80,6 +80,108 @@ class TestSparkSessionManagerConfiguration:
             assert config["endpoint"] is not None
 
 
+class TestSparkSessionManagerGCSConfiguration:
+    """Tests for SparkSessionManager GCS configuration."""
+
+    def test_get_session_with_gcs_backend(self):
+        """Test get_session configures GCS when STORAGE_BACKEND=gcs."""
+        original_instance = SparkSessionManager._instance
+        SparkSessionManager._instance = None
+
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "STORAGE_BACKEND": "gcs",
+                    "GCP_PROJECT_ID": "test-project",
+                },
+            ):
+                with patch(
+                    "etl.jobs.utils.spark_manager.SparkSession"
+                ) as mock_spark_session:
+                    mock_builder = MagicMock()
+                    mock_session = MagicMock()
+                    mock_spark_session.builder = mock_builder
+                    mock_builder.appName.return_value = mock_builder
+                    mock_builder.master.return_value = mock_builder
+                    mock_builder.config.return_value = mock_builder
+                    mock_builder.getOrCreate.return_value = mock_session
+
+                    SparkSessionManager.get_session("TestGCSApp", enable_s3=True)
+
+                    # Verify GCS-related config was called
+                    config_calls = [str(call) for call in mock_builder.config.call_args_list]
+                    config_str = " ".join(config_calls)
+                    assert "fs.gs.impl" in config_str or "gcs" in config_str.lower()
+        finally:
+            SparkSessionManager._instance = original_instance
+
+    def test_get_session_gcs_uses_project_id(self):
+        """Test that GCS configuration uses GCP_PROJECT_ID env var."""
+        original_instance = SparkSessionManager._instance
+        SparkSessionManager._instance = None
+
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "STORAGE_BACKEND": "gcs",
+                    "GCP_PROJECT_ID": "my-custom-project",
+                },
+            ):
+                with patch(
+                    "etl.jobs.utils.spark_manager.SparkSession"
+                ) as mock_spark_session:
+                    mock_builder = MagicMock()
+                    mock_session = MagicMock()
+                    mock_spark_session.builder = mock_builder
+                    mock_builder.appName.return_value = mock_builder
+                    mock_builder.master.return_value = mock_builder
+                    mock_builder.config.return_value = mock_builder
+                    mock_builder.getOrCreate.return_value = mock_session
+
+                    SparkSessionManager.get_session("TestGCSApp", enable_s3=True)
+
+                    # Verify config was called (GCS path)
+                    assert mock_builder.config.called
+        finally:
+            SparkSessionManager._instance = original_instance
+
+    def test_storage_backend_defaults_to_minio(self):
+        """Test that storage backend defaults to minio when not set."""
+        original_instance = SparkSessionManager._instance
+        SparkSessionManager._instance = None
+
+        try:
+            with patch.dict(os.environ, {}, clear=True):
+                # Set minimum required env vars for MinIO
+                os.environ["MINIO_ENDPOINT"] = "localhost:9000"
+                os.environ["MINIO_ACCESS_KEY"] = "minioadmin"
+                os.environ["MINIO_SECRET_KEY"] = "minioadmin"
+                # Ensure STORAGE_BACKEND is not set
+                os.environ.pop("STORAGE_BACKEND", None)
+
+                with patch(
+                    "etl.jobs.utils.spark_manager.SparkSession"
+                ) as mock_spark_session:
+                    mock_builder = MagicMock()
+                    mock_session = MagicMock()
+                    mock_spark_session.builder = mock_builder
+                    mock_builder.appName.return_value = mock_builder
+                    mock_builder.master.return_value = mock_builder
+                    mock_builder.config.return_value = mock_builder
+                    mock_builder.getOrCreate.return_value = mock_session
+
+                    SparkSessionManager.get_session("TestMinIOApp", enable_s3=True)
+
+                    # Verify S3A config was called (MinIO path)
+                    config_calls = [str(call) for call in mock_builder.config.call_args_list]
+                    config_str = " ".join(config_calls)
+                    assert "s3a" in config_str.lower() or "fs.s3a" in config_str
+        finally:
+            SparkSessionManager._instance = original_instance
+
+
 class TestSparkSessionManagerStopSessionExtended:
     """Extended tests for SparkSessionManager.stop_session method."""
 

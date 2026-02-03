@@ -6,7 +6,7 @@ import os
 import pytest
 from unittest.mock import patch
 
-from etl.jobs.utils.config import MinIOConfig, JobConfig
+from etl.jobs.utils.config import MinIOConfig, GCSConfig, JobConfig
 
 
 class TestMinIOConfig:
@@ -102,6 +102,44 @@ class TestMinIOConfig:
                 MinIOConfig()
 
 
+class TestGCSConfig:
+    """Tests for GCSConfig dataclass."""
+
+    def test_default_values(self):
+        """Test GCSConfig uses default values when env vars not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            config = GCSConfig()
+            assert config.bucket == "nyc-taxi-dev-etl-us-central1-01"
+            assert config.project_id == "nyc-taxi-pipeline-001"
+            assert config.bronze_path == "bronze/nyc_taxi"
+            assert config.silver_path == "silver/nyc_taxi"
+            assert config.gold_path == "gold/nyc_taxi"
+
+    def test_custom_values_from_env(self):
+        """Test GCSConfig reads from environment variables."""
+        with patch.dict(
+            os.environ,
+            {
+                "GCS_BUCKET": "custom-gcs-bucket",
+                "GCP_PROJECT_ID": "custom-project",
+            },
+        ):
+            config = GCSConfig()
+            assert config.bucket == "custom-gcs-bucket"
+            assert config.project_id == "custom-project"
+
+    def test_empty_bucket_raises_error(self):
+        """Test that empty bucket raises ValueError."""
+        with patch.dict(
+            os.environ,
+            {
+                "GCS_BUCKET": "",
+            },
+        ):
+            with pytest.raises(ValueError, match="GCS_BUCKET must be set"):
+                GCSConfig()
+
+
 class TestJobConfigExtended:
     """Extended tests for JobConfig singleton."""
 
@@ -151,6 +189,87 @@ class TestJobConfigExtended:
         ):
             config = JobConfig()
             assert isinstance(config.minio, MinIOConfig)
+
+    def test_gcs_property_returns_config(self):
+        """Test that gcs property returns GCSConfig instance."""
+        with patch.dict(
+            os.environ,
+            {
+                "GCS_BUCKET": "test-bucket",
+                "GCP_PROJECT_ID": "test-project",
+            },
+        ):
+            config = JobConfig()
+            assert isinstance(config.gcs, GCSConfig)
+
+    def test_storage_backend_default_minio(self):
+        """Test that default storage backend is minio."""
+        with patch.dict(
+            os.environ,
+            {
+                "MINIO_ENDPOINT": "localhost:9000",
+                "MINIO_BUCKET": "test",
+            },
+            clear=True,
+        ):
+            # Ensure STORAGE_BACKEND is not set
+            os.environ.pop("STORAGE_BACKEND", None)
+            config = JobConfig()
+            assert config.storage_backend == "minio"
+            assert config.use_gcs is False
+
+    def test_storage_backend_gcs(self):
+        """Test that storage backend can be set to gcs."""
+        with patch.dict(
+            os.environ,
+            {
+                "STORAGE_BACKEND": "gcs",
+                "GCS_BUCKET": "test-bucket",
+            },
+        ):
+            config = JobConfig()
+            assert config.storage_backend == "gcs"
+            assert config.use_gcs is True
+
+    def test_get_storage_path_gcs_bronze(self):
+        """Test get_storage_path for GCS bronze layer."""
+        with patch.dict(
+            os.environ,
+            {
+                "STORAGE_BACKEND": "gcs",
+                "GCS_BUCKET": "my-gcs-bucket",
+            },
+        ):
+            config = JobConfig()
+            path = config.get_storage_path("bronze", "yellow")
+            assert path == "gs://my-gcs-bucket/bronze/nyc_taxi/yellow"
+
+    def test_get_storage_path_gcs_gold(self):
+        """Test get_storage_path for GCS gold layer."""
+        with patch.dict(
+            os.environ,
+            {
+                "STORAGE_BACKEND": "gcs",
+                "GCS_BUCKET": "my-gcs-bucket",
+            },
+        ):
+            config = JobConfig()
+            path = config.get_storage_path("gold")
+            assert path == "gs://my-gcs-bucket/gold/nyc_taxi"
+
+    def test_get_storage_path_minio_bronze(self):
+        """Test get_storage_path for MinIO bronze layer."""
+        with patch.dict(
+            os.environ,
+            {
+                "STORAGE_BACKEND": "minio",
+                "MINIO_ENDPOINT": "localhost:9000",
+                "MINIO_BUCKET": "my-bucket",
+            },
+        ):
+            config = JobConfig()
+            path = config.get_storage_path("bronze", "yellow")
+            assert path == "s3a://my-bucket/bronze/nyc_taxi/yellow"
 
     def test_get_s3_path_bronze(self):
         """Test get_s3_path for bronze layer."""
@@ -216,6 +335,19 @@ class TestJobConfigExtended:
             config = JobConfig()
             with pytest.raises(ValueError, match="Invalid layer"):
                 config.get_s3_path("invalid")
+
+    def test_get_storage_path_invalid_layer(self):
+        """Test get_storage_path raises ValueError for invalid layer."""
+        with patch.dict(
+            os.environ,
+            {
+                "STORAGE_BACKEND": "gcs",
+                "GCS_BUCKET": "my-bucket",
+            },
+        ):
+            config = JobConfig()
+            with pytest.raises(ValueError, match="Invalid layer"):
+                config.get_storage_path("invalid")
 
     def test_reset_clears_singleton(self):
         """Test that reset() clears the singleton instance."""
