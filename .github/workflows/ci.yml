@@ -4,7 +4,7 @@ run-name: ${{ github.event.head_commit.message || github.event.pull_request.titl
 
 on:
   push:
-    branches: [ main ]
+    branches: [ develop, develop/* ]
   pull_request:
     branches: [ main, develop, develop/* ]
 

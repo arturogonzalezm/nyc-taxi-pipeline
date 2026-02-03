@@ -1,4 +1,4 @@
-name: Destroy Terraform Infrastructure on GCP
+name: Destroy Terraform on GCP
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
         type: string
 
 env:
-  TF_VERSION: '1.14.4'
+  TF_VERSION: '1.5.0'
   WORKING_DIR: './terraform'
 
 jobs:

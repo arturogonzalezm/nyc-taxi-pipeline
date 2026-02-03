@@ -6,15 +6,26 @@
 
 # NYC Taxi Data Pipeline
 
-A PySpark-based ETL pipeline for processing NYC Taxi & Limousine Commission (TLC) trip data. The pipeline implements a medallion architecture (Bronze/Gold layers) with a dimensional model loaded into PostgreSQL.
+A production-ready PySpark ETL pipeline for processing NYC Taxi & Limousine Commission (TLC) trip data. The pipeline implements a medallion architecture (Bronze/Gold layers) with a dimensional model, supporting both Google Cloud Storage (GCS) and MinIO for data lake storage, with PostgreSQL for analytics.
 
 ## Table of Contents
 
-- [Architecture](docs/ARCHITECTURE.md)
+- [Architecture](#architecture)
+- [Infrastructure](#infrastructure)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Running the Pipeline](#running-the-pipeline)
+- [Testing](#testing)
+- [Documentation](#documentation)
+
+### Additional Documentation
+
+- [Architecture Details](docs/ARCHITECTURE.md)
 - [Dataset Explanation](docs/DATASET.md)
 - [Data Model and Schema](docs/DATA_MODEL.md)
 - [Historical Strategy](docs/HISTORICAL_STRATEGY.md)
-- [How to Run Locally](docs/LOCAL_SETUP.md)
+- [Local Setup Guide](docs/LOCAL_SETUP.md)
+- [Terraform Infrastructure](terraform/README.md)
 
 ## Architecture
 
@@ -39,16 +50,48 @@ sequenceDiagram
 
 | Layer | Purpose | Storage |
 |-------|---------|---------|
-| Bronze | Raw data ingestion with metadata columns | MinIO (S3-compatible) |
-| Gold | Dimensional model with data quality checks | MinIO (S3-compatible) |
+| Bronze | Raw data ingestion with metadata columns | GCS or MinIO |
+| Gold | Dimensional model with data quality checks | GCS or MinIO |
 | Load | Star schema for analytics | PostgreSQL |
+
+### Storage Backends
+
+The pipeline supports two storage backends:
+
+| Backend | Use Case | Configuration |
+|---------|----------|---------------|
+| **Google Cloud Storage (GCS)** | Production deployments on GCP | `STORAGE_BACKEND=gcs` |
+| **MinIO** | Local development and testing | `STORAGE_BACKEND=minio` |
+
+## Infrastructure
+
+The project includes Terraform configuration for automated GCP infrastructure provisioning:
+
+- **GCP Project** with billing configuration
+- **Service Account** for pipeline operations
+- **GCS Bucket** for data lake storage (`nyc-taxi-dev-etl-us-central1-01`)
+- **Workload Identity Federation** for secure GitHub Actions authentication
+- **IAM Roles** for storage and BigQuery access
+
+See [terraform/README.md](terraform/README.md) for detailed infrastructure documentation.
+
+### CI/CD Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|----------|
+| `ci.yml` | PR to main/develop | Linting, tests, security scan |
+| `deploy.yml` | Push to main | Deploy Terraform infrastructure |
+| `destroy.yml` | Manual | Destroy infrastructure |
+
+---
 
 ## Prerequisites
 
 - Python 3.12+
-- Docker Desktop (for MinIO and PostgreSQL)
+- Docker Desktop (for MinIO and PostgreSQL in local development)
 - Java 17+ (for PySpark)
 - Apache Spark 4.1.1
+- Google Cloud SDK (for GCS deployments)
 
 ## Quick Start
 
@@ -241,7 +284,8 @@ nyc-taxi-pipeline/
 │   │       ├── config.py            # Configuration (Singleton pattern)
 │   │       └── spark_manager.py     # Spark session management
 │   └── __init__.py
-├── tests/                           # Unit tests (345 tests, 74% coverage)
+├── terraform/                       # GCP infrastructure (Terraform)
+├── tests/                           # Unit tests (548+ tests, 68%+ coverage)
 ├── sql/
 │   └── postgres/
 │       └── create_dimensional_model.sql  # PostgreSQL schema DDL
@@ -269,6 +313,8 @@ The PostgreSQL loader uses hash-based upserts to ensure idempotency:
 
 ## Testing
 
+The project includes comprehensive unit tests with 548+ tests and 68%+ code coverage.
+
 ```bash
 # Run all tests
 pytest tests/ -v
@@ -293,14 +339,24 @@ pylint etl/
 
 ## Environment Variables
 
-Configure via environment variables or a secrets manager. Required variables:
+Configure via environment variables or a secrets manager.
+
+### Storage Configuration
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `STORAGE_BACKEND` | Storage backend (`gcs` or `minio`) | `minio` |
+| `GCS_BUCKET` | GCS bucket name | `nyc-taxi-dev-etl-us-central1-01` |
+| `GCP_PROJECT_ID` | GCP project ID | `nyc-taxi-pipeline-001` |
+| `MINIO_ENDPOINT` | MinIO server endpoint | `localhost:9000` |
+| `MINIO_ACCESS_KEY` | MinIO access key | `minioadmin` |
+| `MINIO_SECRET_KEY` | MinIO secret key | `minioadmin` |
+| `MINIO_BUCKET` | MinIO bucket name | `nyc-taxi-pipeline` |
+
+### Database Configuration
 
 | Variable | Description |
 |----------|-------------|
-| `MINIO_ENDPOINT` | MinIO server endpoint |
-| `MINIO_ACCESS_KEY` | MinIO access key |
-| `MINIO_SECRET_KEY` | MinIO secret key |
-| `MINIO_BUCKET` | MinIO bucket name |
 | `POSTGRES_HOST` | PostgreSQL host |
 | `POSTGRES_PORT` | PostgreSQL port |
 | `POSTGRES_DB` | PostgreSQL database |
@@ -308,3 +364,9 @@ Configure via environment variables or a secrets manager. Required variables:
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 
 > **Note:** Never commit credentials to version control. Use environment variables, secrets managers, or CI/CD secrets for production deployments.
+
+---
+
+## License
+
+This project is for demonstration purposes.
