@@ -6,4 +6,4 @@ region             = "us-central1"
 zone               = "us-central1-a"
 
 # GitHub Configuration (for Workload Identity Federation)
-github_repository = "arturogonzalezm/nyc-taxi-pipeline"  # e.g., "myorg/nyc-taxi-pipeline"
+github_repository = "arturogonzalezm/nyc-taxi-pipeline" # e.g., "myorg/nyc-taxi-pipeline"
