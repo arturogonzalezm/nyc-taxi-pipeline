@@ -47,13 +47,6 @@ jobs:
             -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
             -var="billing_account_id=${{ secrets.GCP_BILLING_ACCOUNT_ID }}" \
             -var="github_repository=${{ github.repository }}" \
-            -var="minio_root_user=${{ secrets.MINIO_ROOT_USER }}" \
-            -var="minio_root_password=${{ secrets.MINIO_ROOT_PASSWORD }}" \
-            -var="minio_access_key=${{ secrets.MINIO_ACCESS_KEY }}" \
-            -var="minio_secret_key=${{ secrets.MINIO_SECRET_KEY }}" \
-            -var="postgres_user=${{ secrets.POSTGRES_USER }}" \
-            -var="postgres_password=${{ secrets.POSTGRES_PASSWORD }}" \
-            -var="airflow_admin_password=${{ secrets.AIRFLOW_ADMIN_PASSWORD }}" \
             -out=tfplan-destroy
 
       - name: Terraform Destroy
