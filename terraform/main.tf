@@ -2,11 +2,21 @@
 # GCP PROJECT
 # =============================================================================
 
+# Enable Cloud Billing API (required before creating projects with billing)
+resource "google_project_service" "cloudbilling" {
+  project = var.project_id
+  service = "cloudbilling.googleapis.com"
+
+  disable_on_destroy = false
+}
+
 # Create the GCP Project
 resource "google_project" "nyc_taxi_project" {
   name            = var.project_name
   project_id      = var.project_id
   billing_account = var.billing_account_id
+
+  depends_on = [google_project_service.cloudbilling]
 
   labels = {
     environment = var.environment
