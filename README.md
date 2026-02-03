@@ -92,6 +92,7 @@ See [terraform/README.md](terraform/README.md) for detailed infrastructure docum
 - Java 17+ (for PySpark)
 - Apache Spark 4.1.1
 - Google Cloud SDK (for GCS deployments)
+- Terraform 1.5.0
 
 ## Quick Start
 
