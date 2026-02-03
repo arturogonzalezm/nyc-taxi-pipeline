@@ -17,6 +17,7 @@ Tests cover uncovered methods:
 - run_gold_job
 """
 
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import date
@@ -158,6 +159,50 @@ class TestTaxiGoldJobExtractZoneLookup:
                 job._extract_zone_lookup()
 
         assert "zone lookup" in str(exc_info.value).lower()
+
+    def test_extract_zone_lookup_gcs_path(self):
+        """Test zone lookup uses GCS path when STORAGE_BACKEND=gcs."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "gcs"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            mock_spark_read = MagicMock()
+            mock_spark_read.option.return_value = mock_spark_read
+            mock_spark_read.csv.return_value = mock_df
+
+            with patch.object(job, "spark") as mock_spark:
+                mock_spark.read = mock_spark_read
+                result = job._extract_zone_lookup()
+
+            # Verify GCS path was used
+            call_args = mock_spark_read.csv.call_args
+            assert "gs://" in call_args[0][0]
+            assert result is mock_df
+
+    def test_extract_zone_lookup_minio_path(self):
+        """Test zone lookup uses MinIO path when STORAGE_BACKEND=minio."""
+        with patch.dict(os.environ, {"STORAGE_BACKEND": "minio"}):
+            JobConfig.reset()
+            job = TaxiGoldJob("yellow", 2024, 1)
+
+            mock_df = MagicMock()
+            mock_df.count.return_value = 265
+
+            mock_spark_read = MagicMock()
+            mock_spark_read.option.return_value = mock_spark_read
+            mock_spark_read.csv.return_value = mock_df
+
+            with patch.object(job, "spark") as mock_spark:
+                mock_spark.read = mock_spark_read
+                result = job._extract_zone_lookup()
+
+            # Verify S3A path was used
+            call_args = mock_spark_read.csv.call_args
+            assert "s3a://" in call_args[0][0]
+            assert result is mock_df
 
 
 class TestTaxiGoldJobTransform:
