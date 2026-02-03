@@ -453,7 +453,7 @@ class TaxiIngestionJob(BaseSparkJob):
 
     def load(self, df: DataFrame):
         """
-        Load data to MinIO bronze layer with partitioning.
+        Load data to cloud storage (GCS or MinIO) bronze layer with partitioning.
         Partitioned by year and month for:
         - Delta Lake compatibility
         - CDC (Change Data Capture) tracking
@@ -464,24 +464,25 @@ class TaxiIngestionJob(BaseSparkJob):
         df = df.cache()
         record_count = df.count()
 
-        if self.config.minio.use_minio:
-            s3_path = self.config.get_s3_path("bronze", taxi_type=self.taxi_type)
+        if self.config.use_gcs or self.config.minio.use_minio:
+            storage_path = self.config.get_storage_path("bronze", taxi_type=self.taxi_type)
+            backend_name = "GCS" if self.config.use_gcs else "MinIO"
             self.logger.info(
-                f"Writing {record_count:,} records to MinIO bronze layer: {s3_path}"
+                f"Writing {record_count:,} records to {backend_name} bronze layer: {storage_path}"
             )
             self.logger.info(f"Partitioning by: year={self.year}, month={self.month}")
 
             # Partition by year and month for optimal performance and delta operations
             df.write.mode("append").partitionBy("year", "month").option(
                 "compression", "snappy"
-            ).parquet(s3_path)
+            ).parquet(storage_path)
 
             self.logger.info(
                 f"Successfully loaded {record_count:,} records to bronze layer"
             )
-            self.logger.info(f"Path: {s3_path}/year={self.year}/month={self.month}/")
+            self.logger.info(f"Path: {storage_path}/year={self.year}/month={self.month}/")
         else:
-            # If not using MinIO, save locally with partitioning
+            # If not using cloud storage, save locally with partitioning
             output_path = f"{self.config.cache_dir}/output/{self.taxi_type}"
             self.logger.info(
                 f"Writing {record_count:,} records to local path: {output_path}"

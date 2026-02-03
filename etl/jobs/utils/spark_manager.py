@@ -59,16 +59,18 @@ except Exception as e:
 
 class SparkSessionManager:
     """
-    Singleton Spark session manager with production-ready MinIO/S3A support.
+    Singleton Spark session manager with production-ready MinIO/S3A and GCS support.
 
     This class manages the SparkSession lifecycle and applies specialized configuration
     to work around Hadoop 3.4.2+ compatibility issues with S3A timeout values.
+    It also supports Google Cloud Storage (GCS) as an alternative storage backend.
 
     Architecture:
         - Uses PySpark's built-in thread-safe getOrCreate() for singleton behavior
         - Applies three-layer configuration fix for Hadoop 3.4.2 timeout strings
         - Validates environment variables before session creation
         - Provides proper cleanup and resource management
+        - Supports GCS via STORAGE_BACKEND=gcs environment variable
 
     Configuration Layers:
         1. HADOOP_CONF_DIR points to custom core-site.xml (set at module import)
@@ -77,7 +79,7 @@ class SparkSessionManager:
 
     Example:
         >>> spark = SparkSessionManager.get_session("MyETLJob", enable_s3=True)
-        >>> df = spark.read.parquet("s3a://bucket/data")
+        >>> df = spark.read.parquet("s3a://bucket/data")  # or gs://bucket/data for GCS
         >>> # ... perform operations ...
         >>> SparkSessionManager.stop_session()  # Cleanup when done
 
@@ -178,8 +180,34 @@ class SparkSessionManager:
                     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
                 )
 
+                # Check storage backend preference
+                storage_backend = os.getenv("STORAGE_BACKEND", "minio").lower()
+
+                # Configure for GCS access
+                if storage_backend == "gcs":
+                    gcs_project = os.getenv("GCP_PROJECT_ID", "nyc-taxi-pipeline-001")
+                    logger.info(f"Configuring Spark for GCS with project: {gcs_project}")
+
+                    # GCS configuration using the GCS connector
+                    builder = (
+                        builder.config(
+                            "spark.hadoop.fs.gs.impl",
+                            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+                        )
+                        .config(
+                            "spark.hadoop.fs.AbstractFileSystem.gs.impl",
+                            "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
+                        )
+                        .config("spark.hadoop.fs.gs.project.id", gcs_project)
+                        .config("spark.hadoop.fs.gs.auth.type", "APPLICATION_DEFAULT")
+                        .config(
+                            "spark.jars.packages",
+                            "com.google.cloud.bigdataoss:gcs-connector:hadoop3-2.2.18,"
+                            "org.postgresql:postgresql:42.7.1",
+                        )
+                    )
                 # Configure for MinIO/S3A access if enabled
-                if enable_s3:
+                elif enable_s3:
                     minio_config = cls._validate_s3_config()
 
                     # S3A configuration for MinIO with explicit numeric timeout values
@@ -228,7 +256,7 @@ class SparkSessionManager:
                 # Layer 3: Post-creation Hadoop configuration overrides
                 # This must be done AFTER SparkSession creation to override core-default.xml
                 # Ensures runtime safety even if earlier layers failed
-                if enable_s3:
+                if enable_s3 and storage_backend != "gcs":
                     cls._apply_hadoop_overrides()
 
                 # Store configuration for diagnostics
