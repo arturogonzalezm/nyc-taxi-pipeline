@@ -190,3 +190,64 @@ class TestSafeHistoricalBackfill:
     def test_safe_historical_backfill_function_exists(self):
         """Test safe_historical_backfill function exists."""
         assert callable(safe_historical_backfill)
+
+    def test_safe_historical_backfill_processes_months(self):
+        """Test safe_historical_backfill processes multiple months."""
+        with patch("etl.jobs.utils.spark_manager.SparkSessionManager") as mock_sm:
+            mock_spark = MagicMock()
+            mock_sm.get_session.return_value = mock_spark
+            with patch(
+                "etl.jobs.bronze.taxi_injection_safe_backfill_job.safe_backfill_month"
+            ) as mock_backfill:
+                mock_backfill.side_effect = [
+                    {
+                        "status": "SUCCESS",
+                        "period": "2024-01",
+                        "records_after": 1000,
+                        "duplicates_after": 0,
+                    },
+                    {
+                        "status": "SUCCESS",
+                        "period": "2024-02",
+                        "records_after": 1000,
+                        "duplicates_after": 0,
+                    },
+                ]
+
+                results = safe_historical_backfill(
+                    "yellow", [(2024, 1), (2024, 2)], delete_existing=False
+                )
+
+        assert len(results) == 2
+        assert mock_backfill.call_count == 2
+
+    def test_safe_historical_backfill_empty_months(self):
+        """Test safe_historical_backfill with empty months list."""
+        with patch("etl.jobs.utils.spark_manager.SparkSessionManager") as mock_sm:
+            mock_spark = MagicMock()
+            mock_sm.get_session.return_value = mock_spark
+
+            results = safe_historical_backfill("yellow", [], delete_existing=False)
+
+        assert results == {}
+
+    def test_safe_historical_backfill_with_delete(self):
+        """Test safe_historical_backfill with delete_existing=True."""
+        with patch("etl.jobs.utils.spark_manager.SparkSessionManager") as mock_sm:
+            mock_spark = MagicMock()
+            mock_sm.get_session.return_value = mock_spark
+            with patch(
+                "etl.jobs.bronze.taxi_injection_safe_backfill_job.safe_backfill_month"
+            ) as mock_backfill:
+                mock_backfill.return_value = {
+                    "status": "SUCCESS",
+                    "period": "2024-03",
+                    "records_after": 500,
+                    "duplicates_after": 0,
+                }
+
+                results = safe_historical_backfill(
+                    "green", [(2024, 3)], delete_existing=True
+                )
+
+        assert len(results) == 1
