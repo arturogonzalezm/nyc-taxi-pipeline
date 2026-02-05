@@ -15,11 +15,15 @@ WORKDIR /app
 
 # Install Python dependencies first (cached layer)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir pyspark==4.1.1 delta-spark==4.0.1 psycopg2-binary>=2.9.9 requests minio python-dateutil
+RUN pip install --no-cache-dir pyspark==4.1.1 delta-spark==4.0.1 psycopg2-binary>=2.9.9 requests python-dateutil google-cloud-storage
+
+# Download GCS connector for Spark
+RUN mkdir -p /opt/spark/jars && \
+    curl -L -o /opt/spark/jars/gcs-connector-hadoop3-latest.jar \
+    https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop3-latest.jar
 
 # Copy project files
 COPY etl/ ./etl/
-COPY .hadoop-conf/ ./.hadoop-conf/
 
 # Install package in editable mode (fast, deps already installed)
 RUN pip install --no-cache-dir --no-deps -e .

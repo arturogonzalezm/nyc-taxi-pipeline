@@ -1,13 +1,11 @@
-variable "project_id" {
-  description = "Base name for the GCP Project ID"
+# =============================================================================
+# PROJECT CONFIGURATION
+# =============================================================================
+
+variable "project_id_base" {
+  description = "GCP Project ID base name"
   type        = string
   default     = "nyc-taxi-pipeline"
-}
-
-variable "instance_number" {
-  description = "Instance number (01, 02, etc.)"
-  type        = string
-  default     = "01"
 }
 
 variable "project_name" {
@@ -22,6 +20,10 @@ variable "billing_account_id" {
   sensitive   = true
 }
 
+# =============================================================================
+# LOCATION CONFIGURATION
+# =============================================================================
+
 variable "region" {
   description = "GCP Region"
   type        = string
@@ -34,25 +36,60 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
+# =============================================================================
+# ENVIRONMENT CONFIGURATION
+# =============================================================================
+
 variable "environment" {
-  description = "Environment name (dev, prod)"
+  description = "Environment name (dev, staging, prod)"
   type        = string
   default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "Environment must be one of: dev, staging, prod."
+  }
+}
+
+variable "instance_number" {
+  description = "Instance number for resource naming (e.g., 001, 002)"
+  type        = string
+  default     = "001"
 }
 
 variable "bucket_suffix" {
-  description = "Bucket suffix number (e.g., 01, 02)"
+  description = "Bucket suffix number (e.g., 001, 002)"
   type        = string
-  default     = "01"
+  default     = "001"
 }
 
-# GitHub Variables
+variable "resource-type" {
+  description = "GCP Resource (e.g., gcs, sa, iam, bigquery, cr, cc, network, etc)"
+  type        = string
+  default     = "gcs"
+
+  validation {
+    condition     = contains(["gcs", "sa", "iam", "bigquery", "cr", "cc", "network"], var.resource-type)
+    error_message = "Resource type must be one of: gcs, sa, iam, bigquery."
+  }
+}
+
+
+# =============================================================================
+# GITHUB CONFIGURATION
+# =============================================================================
+
 variable "github_repository" {
   description = "GitHub repository in format 'owner/repo' for Workload Identity Federation"
   type        = string
 }
 
-# Construct the full project ID
+# =============================================================================
+# LOCAL VALUES
+# =============================================================================
+
 locals {
-  project_id = "${var.project_id}-${var.environment}-${var.instance_number}"
+  # Construct the full project ID: nyc-taxi-pipeline-dev-001
+  full_project_id = "${var.project_id_base}-${var.environment}-${var.region}-${var.instance_number}"
+  full_bucket_id  = "${var.project_id_base}-${var.environment}-${var.resource-type}-${var.region}-${var.bucket_suffix}"
 }

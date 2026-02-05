@@ -2,17 +2,31 @@
 # GCP PROJECT
 # =============================================================================
 
+# Create the GCP Project
+resource "google_project" "nyc_taxi_project" {
+  name            = var.project_name
+  project_id      = local.full_project_id
+  billing_account = var.billing_account_id
+
+  labels = {
+    environment = var.environment
+    project     = var.project_id_base
+  }
+}
+
 # Enable Cloud Resource Manager API (required for project operations)
 resource "google_project_service" "cloudresourcemanager" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   service = "cloudresourcemanager.googleapis.com"
 
   disable_on_destroy = false
+
+  depends_on = [google_project.nyc_taxi_project]
 }
 
-# Enable Cloud Billing API (required before creating projects with billing)
+# Enable Cloud Billing API
 resource "google_project_service" "cloudbilling" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   service = "cloudbilling.googleapis.com"
 
   disable_on_destroy = false
@@ -20,23 +34,19 @@ resource "google_project_service" "cloudbilling" {
   depends_on = [google_project_service.cloudresourcemanager]
 }
 
-# Create the GCP Project
-resource "google_project" "nyc_taxi_project" {
-  name            = var.project_name
-  project_id      = var.project_id
-  billing_account = var.billing_account_id
+# Enable IAM API
+resource "google_project_service" "iam" {
+  project = google_project.nyc_taxi_project.project_id
+  service = "iam.googleapis.com"
 
-  depends_on = [google_project_service.cloudbilling]
+  disable_on_destroy = false
 
-  labels = {
-    environment = var.environment
-    project     = "nyc-taxi-pipeline"
-  }
+  depends_on = [google_project.nyc_taxi_project]
 }
 
 # Enable IAM Service Account Credentials API (required for Workload Identity Federation)
 resource "google_project_service" "iamcredentials" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   service = "iamcredentials.googleapis.com"
 
   disable_on_destroy = false
@@ -46,7 +56,7 @@ resource "google_project_service" "iamcredentials" {
 
 # Enable Service Usage API (required for listing/managing project services)
 resource "google_project_service" "serviceusage" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   service = "serviceusage.googleapis.com"
 
   disable_on_destroy = false
@@ -54,30 +64,36 @@ resource "google_project_service" "serviceusage" {
   depends_on = [google_project.nyc_taxi_project]
 }
 
-# Service Account for the pipeline
-resource "google_service_account" "nyc_taxi_sa" {
-  account_id   = "nyc-taxi-account"
-  display_name = "NYC Taxi Pipeline Service Account"
-  project      = var.project_id
-}
-
-# =============================================================================
-# WORKLOAD IDENTITY FEDERATION (for GitHub Actions)
-# =============================================================================
-
-# Enable IAM API
-resource "google_project_service" "iam" {
-  project = var.project_id
-  service = "iam.googleapis.com"
+# Enable Cloud Storage API
+resource "google_project_service" "storage" {
+  project = google_project.nyc_taxi_project.project_id
+  service = "storage.googleapis.com"
 
   disable_on_destroy = false
 
   depends_on = [google_project.nyc_taxi_project]
 }
 
+# =============================================================================
+# SERVICE ACCOUNT
+# =============================================================================
+
+# Service Account for the pipeline
+resource "google_service_account" "nyc_taxi_sa" {
+  account_id   = "${var.project_id_base}-${var.environment}-sa-${var.instance_number}"
+  display_name = "NYC Taxi Pipeline Service Account (${var.environment})"
+  project      = google_project.nyc_taxi_project.project_id
+
+  depends_on = [google_project_service.iam]
+}
+
+# =============================================================================
+# WORKLOAD IDENTITY FEDERATION (for GitHub Actions)
+# =============================================================================
+
 # Workload Identity Pool for GitHub Actions
 resource "google_iam_workload_identity_pool" "github_pool" {
-  project                   = var.project_id
+  project                   = google_project.nyc_taxi_project.project_id
   workload_identity_pool_id = "github-actions-pool"
   display_name              = "GitHub Actions Pool"
   description               = "Identity pool for GitHub Actions CI/CD"
@@ -87,7 +103,7 @@ resource "google_iam_workload_identity_pool" "github_pool" {
 
 # Workload Identity Provider for GitHub OIDC
 resource "google_iam_workload_identity_pool_provider" "github_provider" {
-  project                            = var.project_id
+  project                            = google_project.nyc_taxi_project.project_id
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub Provider"
@@ -117,31 +133,23 @@ resource "google_service_account_iam_member" "github_actions_impersonation" {
 # IAM ROLES
 # =============================================================================
 
-# Enable Cloud Storage API
-resource "google_project_service" "storage" {
-  project = var.project_id
-  service = "storage.googleapis.com"
-
-  disable_on_destroy = false
-}
-
 # IAM: Storage Admin for GCS bucket management
 resource "google_project_iam_member" "storage_admin" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   role    = "roles/storage.admin"
   member  = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
 }
 
 # IAM: BigQuery Data Editor for data operations
 resource "google_project_iam_member" "bigquery_data_editor" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   role    = "roles/bigquery.dataEditor"
   member  = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
 }
 
 # IAM: BigQuery Job User for running queries
 resource "google_project_iam_member" "bigquery_job_user" {
-  project = var.project_id
+  project = google_project.nyc_taxi_project.project_id
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.nyc_taxi_sa.email}"
 }
@@ -152,9 +160,9 @@ resource "google_project_iam_member" "bigquery_job_user" {
 
 # Single GCS Bucket for NYC Taxi Pipeline
 resource "google_storage_bucket" "nyc_taxi_pipeline" {
-  name          = "nyc-taxi-${var.environment}-etl-${var.region}-${var.bucket_suffix}"
+  name          = local.full_bucket_id
   location      = var.region
-  project       = var.project_id
+  project       = google_project.nyc_taxi_project.project_id
   force_destroy = true
 
   uniform_bucket_level_access = true
@@ -175,7 +183,7 @@ resource "google_storage_bucket" "nyc_taxi_pipeline" {
 
   labels = {
     environment = var.environment
-    project     = "nyc-taxi-pipeline"
+    project     = var.project_id_base
   }
 
   depends_on = [google_project_service.storage]

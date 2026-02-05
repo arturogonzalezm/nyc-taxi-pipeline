@@ -150,7 +150,7 @@ class BaseSparkJob(ABC):
             # Initialise Spark session
             with self._track_metrics("initialisation"):
                 self.spark = SparkSessionManager.get_session(
-                    app_name=self.job_name, enable_s3=self.config.minio.use_minio
+                    app_name=self.job_name
                 )
 
             # Execute ETL pipeline

@@ -5,7 +5,7 @@ This module implements the load layer pipeline that reads the gold layer
 dimensional model and loads it into PostgreSQL for analytics and BI tools.
 
 Architecture:
-    - Reads from Gold layer (Parquet files in MinIO/S3)
+    - Reads from Gold layer (Parquet files in GCS)
     - Loads into PostgreSQL using JDBC
     - Supports both full refresh and incremental loads
     - Handles yellow and green taxi data
@@ -163,7 +163,7 @@ class PostgresLoadJob(BaseSparkJob):
 
         :raises JobExecutionError: If extraction fails
         """
-        gold_base_path = self.config.get_s3_path("gold", taxi_type=self.taxi_type)
+        gold_base_path = self.config.get_storage_path("gold", taxi_type=self.taxi_type)
         self.logger.info(f"Reading dimensional model from: {gold_base_path}")
 
         dimensional_model = {}

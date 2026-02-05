@@ -9,41 +9,19 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional
 from pathlib import Path
 
+from etl.jobs.utils.terraform_config import get_gcp_config_with_fallback
 
-@dataclass
-class MinIOConfig:
-    """
-    MinIO/S3 configuration with environment variable support.
 
-    All configuration values are loaded from environment variables with sensible defaults.
-    This follows the 12-factor app methodology for configuration management.
-    """
+def _get_bucket() -> str:
+    """Get GCS bucket from env var or terraform.tfvars."""
+    _, bucket = get_gcp_config_with_fallback()
+    return bucket
 
-    endpoint: str = field(
-        default_factory=lambda: os.getenv("MINIO_ENDPOINT", "localhost:9000")
-    )
-    access_key: str = field(
-        default_factory=lambda: os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-    )
-    secret_key: str = field(
-        default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin")
-    )
-    bucket: str = field(
-        default_factory=lambda: os.getenv("MINIO_BUCKET", "nyc-taxi-pipeline")
-    )
-    bronze_path: str = "bronze/nyc_taxi"
-    silver_path: str = "silver/nyc_taxi"
-    gold_path: str = "gold/nyc_taxi"
-    use_minio: bool = field(
-        default_factory=lambda: os.getenv("USE_MINIO", "true").lower() == "true"
-    )
 
-    def __post_init__(self):
-        """Validate configuration after initialization"""
-        if not self.endpoint:
-            raise ValueError("MINIO_ENDPOINT must be set")
-        if not self.bucket:
-            raise ValueError("MINIO_BUCKET must be set")
+def _get_project_id() -> str:
+    """Get GCP project ID from env var or terraform.tfvars."""
+    project_id, _ = get_gcp_config_with_fallback()
+    return project_id
 
 
 @dataclass
@@ -51,26 +29,41 @@ class GCSConfig:
     """
     Google Cloud Storage configuration with environment variable support.
 
-    All configuration values are loaded from environment variables with sensible defaults.
-    This follows the 12-factor app methodology for configuration management.
+    Configuration values are loaded with the following priority:
+    1. Environment variables (GCP_PROJECT_ID, GCS_BUCKET)
+    2. Computed from terraform/terraform.tfvars
     """
 
-    bucket: str = field(
-        default_factory=lambda: os.getenv(
-            "GCS_BUCKET", "nyc-taxi-dev-etl-us-central1-01"
-        )
-    )
-    project_id: str = field(
-        default_factory=lambda: os.getenv("GCP_PROJECT_ID", "nyc-taxi-pipeline-001")
-    )
+    bucket: str = field(default_factory=_get_bucket)
+    project_id: str = field(default_factory=_get_project_id)
     bronze_path: str = "bronze/nyc_taxi"
     silver_path: str = "silver/nyc_taxi"
     gold_path: str = "gold/nyc_taxi"
 
     def __post_init__(self):
-        """Validate configuration after initialization"""
+        """Validate configuration after initialization."""
+        self._validate()
+
+    def _validate(self):
+        """Validate all required configuration values."""
+        errors = []
+
         if not self.bucket:
-            raise ValueError("GCS_BUCKET must be set")
+            errors.append(
+                "GCS_BUCKET not configured. Set via environment variable or "
+                "ensure terraform/terraform.tfvars exists with required variables."
+            )
+
+        if not self.project_id:
+            errors.append(
+                "GCP_PROJECT_ID not configured. Set via environment variable or "
+                "ensure terraform/terraform.tfvars exists with required variables."
+            )
+
+        if errors:
+            raise ValueError(
+                "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
 
 
 class JobConfig:
@@ -112,9 +105,7 @@ class JobConfig:
         base_temp = Path(tempfile.gettempdir())
         self._cache_dir = base_temp / "nyc-taxi-pipeline" / "cache"
 
-        # Initialize storage configuration
-        self._storage_backend = os.getenv("STORAGE_BACKEND", "minio").lower()
-        self._minio = MinIOConfig()
+        # Initialize GCS storage configuration
         self._gcs = GCSConfig()
 
         # Mark as initialized
@@ -132,24 +123,9 @@ class JobConfig:
         return self._cache_dir
 
     @property
-    def storage_backend(self) -> str:
-        """Get storage backend type (minio or gcs)"""
-        return self._storage_backend
-
-    @property
-    def minio(self) -> MinIOConfig:
-        """Get MinIO configuration (immutable)"""
-        return self._minio
-
-    @property
     def gcs(self) -> GCSConfig:
         """Get GCS configuration (immutable)"""
         return self._gcs
-
-    @property
-    def use_gcs(self) -> bool:
-        """Check if GCS storage backend is enabled"""
-        return self._storage_backend == "gcs"
 
     def get_storage_path(
         self,
@@ -157,75 +133,42 @@ class JobConfig:
         taxi_type: Optional[str] = None,
     ) -> str:
         """
-        Get storage path for given layer and taxi type.
-
-        Automatically uses GCS (gs://) or S3 (s3a://) based on STORAGE_BACKEND.
+        Get GCS storage path for given layer and taxi type.
 
         Args:
             layer: Data lake layer (bronze, silver, gold)
             taxi_type: Type of taxi (yellow, green) - optional
 
         Returns:
-            Full storage path (gs:// for GCS, s3a:// for MinIO)
+            Full GCS storage path (gs://)
 
         Raises:
             ValueError: If layer is invalid
 
         Examples:
             >>> config = JobConfig()
-            >>> # With STORAGE_BACKEND=gcs
             >>> config.get_storage_path("bronze", "yellow")
-            'gs://nyc-taxi-dev-etl-us-central1-01/bronze/nyc_taxi/yellow'
-            >>> # With STORAGE_BACKEND=minio
-            >>> config.get_storage_path("bronze", "yellow")
-            's3a://nyc-taxi-pipeline/bronze/nyc_taxi/yellow'
+            'gs://<GCS_BUCKET>/bronze/nyc_taxi/yellow'
         """
-        if self.use_gcs:
-            try:
-                layer_path = getattr(self._gcs, f"{layer}_path")
-            except AttributeError:
-                raise ValueError(
-                    f"Invalid layer: {layer}. Must be one of: bronze, silver, gold"
-                )
-            base_path = f"gs://{self._gcs.bucket}/{layer_path}"
-        else:
-            try:
-                layer_path = getattr(self._minio, f"{layer}_path")
-            except AttributeError:
-                raise ValueError(
-                    f"Invalid layer: {layer}. Must be one of: bronze, silver, gold"
-                )
-            base_path = f"s3a://{self._minio.bucket}/{layer_path}"
+        try:
+            layer_path = getattr(self._gcs, f"{layer}_path")
+        except AttributeError:
+            raise ValueError(
+                f"Invalid layer: {layer}. Must be one of: bronze, silver, gold"
+            )
+        base_path = f"gs://{self._gcs.bucket}/{layer_path}"
 
         if taxi_type:
             return f"{base_path}/{taxi_type}"
         return base_path
 
-    def get_s3_path(
-        self,
-        layer: Literal["bronze", "silver", "gold"],
-        taxi_type: Optional[str] = None,
-    ) -> str:
-        """
-        Get S3 path for given layer and taxi type.
-
-        DEPRECATED: Use get_storage_path() instead for GCS/MinIO compatibility.
-
-        Args:
-            layer: Data lake layer (bronze, silver, gold)
-            taxi_type: Type of taxi (yellow, green) - optional
-
-        Returns:
-            Full storage path
-        """
-        return self.get_storage_path(layer, taxi_type)
-
     @classmethod
     def reset(cls):
         """
-        Reset singleton instance.
+        Reset singleton instance (primarily for testing).
 
-        Useful for testing purposes only. Should not be used in production code.
+        This allows tests to create fresh configurations without
+        interference from previous test runs.
         """
         cls._instance = None
         cls._initialized = False

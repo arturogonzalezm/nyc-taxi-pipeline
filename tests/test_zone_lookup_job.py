@@ -79,9 +79,9 @@ class TestZoneLookupIngestionJobConstants:
         assert "service_zone" in required
         assert len(required) == 4
 
-    def test_minio_object_path_constant(self):
-        """Test MINIO_OBJECT_PATH constant is set correctly."""
-        assert ZoneLookupIngestionJob.MINIO_OBJECT_PATH == "misc/taxi_zone_lookup.csv"
+    def test_gcs_object_path_constant(self):
+        """Test GCS_OBJECT_PATH constant is set correctly."""
+        assert ZoneLookupIngestionJob.GCS_OBJECT_PATH == "misc/taxi_zone_lookup.csv"
 
 
 class TestReferenceDataError:

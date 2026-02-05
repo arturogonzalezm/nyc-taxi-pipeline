@@ -2,14 +2,14 @@
 NYC Taxi Data Ingestion Job - Bronze Layer ETL.
 
 This module implements the bronze pipeline for NYC Taxi trip data, downloading
-monthly parquet files from NYC TLC and storing them in the MinIO bronze layer with
+monthly parquet files from NYC TLC and storing them in the GCS bronze layer with
 appropriate partitioning for Delta Lake and CDC operations.
 
 Architecture:
     - Follows Medallion Architecture (Bronze/Silver/Gold layers)
-    - Bronze layer: Raw data with minimal gold, metadata added
-    - Implements caching strategy: MinIO cache with local fallback
-    - Supports both single-month and bulk historical bronze
+    - Bronze layer: Raw data with minimal transformations, metadata added
+    - Implements caching strategy: Local cache for downloads
+    - Supports both single-month and bulk historical ingestion
 
 Data Quality:
     - Validates data matches requested year/month
@@ -25,7 +25,7 @@ Partitioning Strategy:
 
 Design Patterns:
     - Template Method: Inherits from BaseSparkJob
-    - Strategy: Configurable extract (MinIO cache vs source)
+    - Strategy: Configurable extract with local caching
     - Factory: Convenience functions for job creation
 """
 
@@ -41,8 +41,6 @@ if __name__ == "__main__" or "etl.jobs" not in sys.modules:
         sys.path.insert(0, str(project_root))
 
 from pyspark.sql import DataFrame
-from minio import Minio
-from minio.error import S3Error
 
 from etl.jobs.base_job import BaseSparkJob, JobExecutionError
 from etl.jobs.utils.config import JobConfig
@@ -73,11 +71,11 @@ class TaxiIngestionJob(BaseSparkJob):
     Production-ready bronze job for NYC Taxi trip data.
 
     This job downloads monthly taxi trip data from NYC TLC, validates it, adds
-    metadata columns for lineage tracking, and loads it to the MinIO bronze layer
+    metadata columns for lineage tracking, and loads it to the GCS bronze layer
     with year/month partitioning.
 
     Features:
-        - MinIO-first caching with local fallback
+        - Local caching for downloaded files
         - Data quality validation (year/month matching)
         - Schema enforcement for critical columns
         - Metadata addition for CDC and lineage tracking
@@ -86,9 +84,9 @@ class TaxiIngestionJob(BaseSparkJob):
 
     Data Flow:
         Extract -> Transform -> Load
-        1. Extract: Download from NYC TLC (or use MinIO/local cache)
+        1. Extract: Download from NYC TLC (with local cache)
         2. Transform: Validate, enforce schema, add metadata (no business logic)
-        3. Load: Write to MinIO bronze layer with partitioning
+        3. Load: Write to GCS bronze layer with partitioning
 
     Example:
         >>> # Single month bronze
@@ -184,136 +182,10 @@ class TaxiIngestionJob(BaseSparkJob):
     def extract(self) -> DataFrame:
         """
         Extract data from source.
-        For bronze job, always download from NYC TLC to get fresh data.
+        For bronze job, download from NYC TLC with local caching.
         """
-        return self._extract_from_source()
-
-    def _extract_from_minio(self) -> DataFrame:
-        """
-        Load data from MinIO bronze layer (used by downstream jobs)
-        """
-        s3_path = self.config.get_s3_path("bronze", taxi_type=self.taxi_type)
-        self.logger.info(f"Loading from MinIO: {s3_path}")
-        # Read with partition filters for performance
-        partition_path = f"{s3_path}/year={self.year}/month={self.month}"
-        return self.spark.read.parquet(partition_path)
-
-    def _extract_from_source(self) -> DataFrame:
-        """
-        Download and load data from NYC TLC with intelligent caching.
-
-        Caching Strategy:
-            1. Check MinIO cache (if enabled)
-            2. If cache miss, download from NYC TLC
-            3. Upload to MinIO cache for future use
-            4. Fallback to local cache if MinIO fails
-
-        :returns: DataFrame containing raw trip data from source
-        :raises DownloadError: If download from NYC TLC fails
-        :raises JobExecutionError: If data cannot be loaded
-        """
-        # NYC TLC provides monthly parquet files via their CDN
         url = f"{self.NYC_TLC_BASE_URL}/{self.file_name}"
-
-        if self.config.minio.use_minio:
-            try:
-                return self._extract_with_minio_cache(url)
-            except Exception as e:
-                self.logger.error(f"MinIO cache operation failed: {e}")
-                self.logger.warning("Falling back to local cache")
-                # Fall through to local cache
-
-        # Local cache fallback (if MinIO disabled or error)
         return self._extract_with_local_cache(url)
-
-    def _get_minio_client(self) -> Minio:
-        """
-        Create and return configured MinIO client.
-
-        :returns: Initialised Minio client
-        :raises JobExecutionError: If MinIO client creation fails
-        """
-        try:
-            endpoint = self.config.minio.endpoint.replace("http://", "").replace(
-                "https://", ""
-            )
-            minio_client = Minio(
-                endpoint,
-                access_key=self.config.minio.access_key,
-                secret_key=self.config.minio.secret_key,
-                secure=False,
-            )
-            return minio_client
-        except Exception as e:
-            raise JobExecutionError(f"Failed to create MinIO client: {e}") from e
-
-    def _extract_with_minio_cache(self, url: str) -> DataFrame:
-        """
-        Extract data using MinIO cache-first strategy.
-
-        :params url: Source URL for downloading data
-        :returns DataFrame loaded from MinIO cache or freshly downloaded
-        :raises DownloadError: If download fails
-        :raises JobExecutionError: If MinIO operations fail
-        """
-        cache_object = f"bronze/nyc_taxi/{self.taxi_type}/cache/{self.file_name}"
-        s3_cache_path = f"s3a://{self.config.minio.bucket}/{cache_object}"
-
-        minio_client = self._get_minio_client()
-
-        # Check if file exists in MinIO cache
-        try:
-            minio_client.stat_object(self.config.minio.bucket, cache_object)
-            self.logger.info(f"Cache hit - loading from MinIO: {s3_cache_path}")
-            return self.spark.read.parquet(s3_cache_path)
-        except S3Error:
-            # File doesn't exist in cache - proceed with download
-            self.logger.info("Cache miss - will download from NYC TLC")
-
-        # Download to temporary local file
-        self.logger.info(f"Downloading from: {url}")
-        local_temp_path = Path(self.config.cache_dir)
-        local_temp_path.mkdir(parents=True, exist_ok=True)
-        local_file = local_temp_path / self.file_name
-
-        try:
-            self._download_file(url, local_file)
-        except Exception as e:
-            raise DownloadError(f"Failed to download {url}: {e}") from e
-
-        # Upload to MinIO cache
-        try:
-            self.logger.info(f"Uploading to MinIO cache: {s3_cache_path}")
-            minio_client.fput_object(
-                self.config.minio.bucket,
-                cache_object,
-                str(local_file),
-                content_type="application/octet-stream",
-            )
-            self.logger.info(f"Successfully cached in MinIO: {cache_object}")
-        except S3Error as e:
-            self.logger.warning(f"Failed to upload to MinIO cache: {e}")
-            # Non-critical - continue with local file
-
-        # Read from MinIO cache (if upload succeeded) or local file
-        try:
-            # Try MinIO first
-            minio_client.stat_object(self.config.minio.bucket, cache_object)
-            self.logger.info(f"Reading from MinIO: {s3_cache_path}")
-            df = self.spark.read.parquet(s3_cache_path)
-        except S3Error:
-            # Fall back to local file
-            self.logger.info(f"Reading from local file: {local_file}")
-            df = self.spark.read.parquet(str(local_file))
-
-        # Clean up local temp file
-        try:
-            local_file.unlink()
-            self.logger.info(f"Cleaned up temporary file: {local_file}")
-        except Exception as e:
-            self.logger.warning(f"Failed to delete temporary file {local_file}: {e}")
-
-        return df
 
     def _extract_with_local_cache(self, url: str) -> DataFrame:
         """
@@ -453,7 +325,7 @@ class TaxiIngestionJob(BaseSparkJob):
 
     def load(self, df: DataFrame):
         """
-        Load data to cloud storage (GCS or MinIO) bronze layer with partitioning.
+        Load data to GCS bronze layer with partitioning.
         Partitioned by year and month for:
         - Delta Lake compatibility
         - CDC (Change Data Capture) tracking
@@ -464,36 +336,25 @@ class TaxiIngestionJob(BaseSparkJob):
         df = df.cache()
         record_count = df.count()
 
-        if self.config.use_gcs or self.config.minio.use_minio:
-            storage_path = self.config.get_storage_path(
-                "bronze", taxi_type=self.taxi_type
-            )
-            backend_name = "GCS" if self.config.use_gcs else "MinIO"
-            self.logger.info(
-                f"Writing {record_count:,} records to {backend_name} bronze layer: {storage_path}"
-            )
-            self.logger.info(f"Partitioning by: year={self.year}, month={self.month}")
+        storage_path = self.config.get_storage_path(
+            "bronze", taxi_type=self.taxi_type
+        )
+        self.logger.info(
+            f"Writing {record_count:,} records to GCS bronze layer: {storage_path}"
+        )
+        self.logger.info(f"Partitioning by: year={self.year}, month={self.month}")
 
-            # Partition by year and month for optimal performance and delta operations
-            df.write.mode("append").partitionBy("year", "month").option(
-                "compression", "snappy"
-            ).parquet(storage_path)
+        # Partition by year and month for optimal performance and delta operations
+        df.write.mode("append").partitionBy("year", "month").option(
+            "compression", "snappy"
+        ).parquet(storage_path)
 
-            self.logger.info(
-                f"Successfully loaded {record_count:,} records to bronze layer"
-            )
-            self.logger.info(
-                f"Path: {storage_path}/year={self.year}/month={self.month}/"
-            )
-        else:
-            # If not using cloud storage, save locally with partitioning
-            output_path = f"{self.config.cache_dir}/output/{self.taxi_type}"
-            self.logger.info(
-                f"Writing {record_count:,} records to local path: {output_path}"
-            )
-            df.write.mode("append").partitionBy("year", "month").option(
-                "compression", "snappy"
-            ).parquet(output_path)
+        self.logger.info(
+            f"Successfully loaded {record_count:,} records to bronze layer"
+        )
+        self.logger.info(
+            f"Path: {storage_path}/year={self.year}/month={self.month}/"
+        )
 
         df.unpersist()
 

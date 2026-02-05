@@ -1,30 +1,34 @@
+# =============================================================================
+# NYC TAXI PIPELINE - TERRAFORM VARIABLES
+# =============================================================================
+# Copy this file to terraform.tfvars and update the values.
+# The Python ETL jobs can parse this file to get GCP_PROJECT_ID and GCS_BUCKET.
+# =============================================================================
+
 # GCP Configuration
-project_id         = "your-gcp-project-id"
-billing_account_id = "your-billing-account-id"
-region             = "us-central1"
-zone               = "us-central1-a"
+project_id_base    = "nyc-taxi-pipeline"     # Base name for project ID
+environment        = "dev"                    # Environment: dev, staging, prod
+instance_number    = "001"                    # Instance number for uniqueness
+bucket_suffix      = "001"                    # Bucket suffix for uniqueness
+resource-type      = "gcs"                    # Resource type (gcs, bigquery, etc.)
+project_name       = "NYC Taxi Pipeline"      # Display name in GCP Console
+region             = "us-central1"            # GCP region
+zone               = "us-central1-a"          # GCP zone
+
+# Billing Account (REQUIRED - get from: gcloud billing accounts list)
+billing_account_id = "XXXXXX-XXXXXX-XXXXXX"
 
 # GitHub Configuration (for Workload Identity Federation)
-github_repository = "your-org/your-repo"  # e.g., "myorg/nyc-taxi-pipeline"
+github_repository = "your-org/nyc-taxi-pipeline"  # e.g., "myorg/nyc-taxi-pipeline"
 
-# MinIO Configuration
-# These values should be provided via GitHub Secrets or environment variables
-minio_root_user     = ""  # Set via TF_VAR_minio_root_user
-minio_root_password = ""  # Set via TF_VAR_minio_root_password
-minio_endpoint      = "minio:9000"
-minio_access_key    = ""  # Set via TF_VAR_minio_access_key
-minio_secret_key    = ""  # Set via TF_VAR_minio_secret_key
-
-# PostgreSQL Configuration
-postgres_user     = ""  # Set via TF_VAR_postgres_user
-postgres_password = ""  # Set via TF_VAR_postgres_password
-postgres_db       = "nyc_taxi"
-postgres_url      = "jdbc:postgresql://localhost:5432/nyc_taxi"
-
-# Airflow Configuration
-airflow_admin_username  = "admin"
-airflow_admin_password  = ""  # Set via TF_VAR_airflow_admin_password
-airflow_admin_firstname = "Admin"
-airflow_admin_lastname  = "User"
-airflow_admin_email     = "admin@example.com"
-airflow_admin_role      = "Admin"
+# =============================================================================
+# COMPUTED VALUES (for reference - DO NOT SET MANUALLY)
+# =============================================================================
+# These are computed by Terraform locals and used in Python via terraform_config.py:
+#
+# GCP_PROJECT_ID = ${project_id_base}-${environment}-${region}-${instance_number}
+#                = nyc-taxi-pipeline-dev-us-central1-001
+#
+# GCS_BUCKET     = ${project_id_base}-${environment}-${resource-type}-${region}-${bucket_suffix}
+#                = nyc-taxi-pipeline-dev-gcs-us-central1-001
+# =============================================================================

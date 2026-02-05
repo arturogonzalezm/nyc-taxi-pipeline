@@ -214,13 +214,16 @@ data/cache/
 data/cache/*
 
 # Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
+*.tfplan
+*.tfvars
+!*.tfvars.example
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
-#terraform/terraform.tfvars
-*.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
 !terraform.tfvars.example
 # GCP Service Account Keys (sensitive)
 terraform/*.json
 terraform/nyc-taxi-pipeline-*.json
+*.DS_Store

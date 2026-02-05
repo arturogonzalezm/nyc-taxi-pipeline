@@ -68,7 +68,7 @@ The `main.tf` file is organized into logical sections:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        GCP Project                              │
-│                   (nyc-taxi-pipeline-001)                       │
+│         (${project_id_base}-${environment}-${region}-${instance_number})    │
 └─────────────────────────────────────────────────────────────────┘
                               │
           ┌───────────────────┼───────────────────┐
@@ -111,9 +111,9 @@ Terraform state is currently stored locally. For production environments, consid
 
 | Resource Type | Name/Identifier | Description |
 |---------------|-----------------|-------------|
-| GCP Project | `nyc-taxi-pipeline-001` | Primary project for all resources |
-| Service Account | `nyc-taxi-account@nyc-taxi-pipeline-001.iam.gserviceaccount.com` | Service account for pipeline operations |
-| GCS Bucket | `nyc-taxi-dev-etl-us-central1-01` | Data lake storage bucket |
+| GCP Project | `${project_id_base}-${environment}-${region}-${instance_number}` | Primary project for all resources |
+| Service Account | `${project_id_base}-${environment}-sa-${instance_number}@<project_id>.iam.gserviceaccount.com` | Service account for pipeline operations |
+| GCS Bucket | `${project_id_base}-${environment}-gcs-${region}-${bucket_suffix}` | Data lake storage bucket |
 | Workload Identity Pool | `github-actions-pool` | Identity pool for GitHub Actions |
 | Workload Identity Provider | `github-provider` | OIDC provider for GitHub authentication |
 
@@ -131,7 +131,7 @@ The service account is granted the following roles:
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `project_id` | string | `nyc-taxi-pipeline-001` | GCP Project ID |
+| `project_id` | string | `${project_id_base}-${environment}-${region}-${instance_number}` | GCP Project ID |
 | `project_name` | string | `NYC Taxi Pipeline` | GCP Project display name |
 | `billing_account_id` | string | - | GCP Billing Account ID (required) |
 | `region` | string | `us-central1` | GCP Region |
@@ -163,6 +163,41 @@ The service account is granted the following roles:
 3. GCP Billing Account with appropriate permissions
 4. GitHub repository for CI/CD integration
 
+### Required GCP Permissions (Bootstrap)
+
+Before running Terraform for the first time, the authenticated user/service account needs the following permissions at the **organization or folder level**:
+
+| Permission | Role | Purpose |
+|------------|------|----------|
+| `resourcemanager.projects.create` | `roles/resourcemanager.projectCreator` | Create new GCP projects |
+| `billing.resourceAssociations.create` | `roles/billing.user` | Link projects to billing account |
+| `iam.workloadIdentityPools.create` | `roles/iam.workloadIdentityPoolAdmin` | Create Workload Identity Federation pools |
+| `storage.buckets.create` | `roles/storage.admin` | Create GCS buckets |
+
+**Quick Setup (for project owners):**
+
+```bash
+# Grant yourself the required roles (replace with your email and org/folder ID)
+ORG_ID="your-org-id"  # or use --folder=FOLDER_ID
+USER_EMAIL="your-email@example.com"
+
+# Project Creator (to create new projects)
+gcloud organizations add-iam-policy-binding $ORG_ID \
+  --member="user:$USER_EMAIL" \
+  --role="roles/resourcemanager.projectCreator"
+
+# Billing User (to link billing accounts)
+gcloud organizations add-iam-policy-binding $ORG_ID \
+  --member="user:$USER_EMAIL" \
+  --role="roles/billing.user"
+```
+
+**Note:** If you're deploying to an **existing project** (not creating a new one), you need `roles/owner` or the following roles on that project:
+- `roles/iam.workloadIdentityPoolAdmin`
+- `roles/storage.admin`
+- `roles/iam.serviceAccountAdmin`
+- `roles/serviceusage.serviceUsageAdmin`
+
 ---
 
 ## Deployment
@@ -184,7 +219,7 @@ Required GitHub Secrets:
 ```bash
 # Authenticate with GCP
 gcloud auth application-default login
-gcloud config set project nyc-taxi-pipeline-001
+gcloud config set project <YOUR_PROJECT_ID>
 
 # Initialize Terraform
 cd terraform

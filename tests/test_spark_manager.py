@@ -1,15 +1,10 @@
 """
-Tests for SparkSessionManager class.
-
-Tests cover:
-- SparkSessionError exception
-- S3 configuration validation
-- Environment variable handling
+Unit tests for SparkSessionManager.
 """
 
-import os
 import pytest
 from unittest.mock import patch, MagicMock
+import os
 
 from etl.jobs.utils.spark_manager import SparkSessionManager, SparkSessionError
 
@@ -17,149 +12,168 @@ from etl.jobs.utils.spark_manager import SparkSessionManager, SparkSessionError
 class TestSparkSessionError:
     """Tests for SparkSessionError exception class."""
 
-    def test_spark_session_error_message(self):
+    def test_error_message(self):
         """Test SparkSessionError stores message correctly."""
-        error = SparkSessionError("Session creation failed")
-        assert str(error) == "Session creation failed"
+        error = SparkSessionError("Session failed")
+        assert str(error) == "Session failed"
 
-    def test_spark_session_error_with_cause(self):
-        """Test SparkSessionError with cause exception."""
-        cause = RuntimeError("Underlying error")
-        error = SparkSessionError("Session creation failed")
-        error.__cause__ = cause
-        assert error.__cause__ is cause
-
-    def test_spark_session_error_inheritance(self):
+    def test_error_inheritance(self):
         """Test SparkSessionError inherits from Exception."""
-        error = SparkSessionError("test")
+        error = SparkSessionError("Test")
         assert isinstance(error, Exception)
 
-
-class TestSparkSessionManagerValidateS3Config:
-    """Tests for SparkSessionManager._validate_s3_config method."""
-
-    def test_validate_s3_config_returns_dict(self):
-        """Test that _validate_s3_config returns a dictionary."""
-        config = SparkSessionManager._validate_s3_config()
-        assert isinstance(config, dict)
-
-    def test_validate_s3_config_contains_endpoint(self):
-        """Test that config contains endpoint."""
-        config = SparkSessionManager._validate_s3_config()
-        assert "endpoint" in config
-
-    def test_validate_s3_config_contains_access_key(self):
-        """Test that config contains access_key."""
-        config = SparkSessionManager._validate_s3_config()
-        assert "access_key" in config
-
-    def test_validate_s3_config_contains_secret_key(self):
-        """Test that config contains secret_key."""
-        config = SparkSessionManager._validate_s3_config()
-        assert "secret_key" in config
-
-    def test_validate_s3_config_uses_env_vars(self):
-        """Test that config uses environment variables."""
-        with patch.dict(
-            os.environ,
-            {
-                "MINIO_ENDPOINT": "custom-endpoint:9000",
-                "MINIO_ACCESS_KEY": "custom-access",
-                "MINIO_SECRET_KEY": "custom-secret",
-            },
-        ):
-            config = SparkSessionManager._validate_s3_config()
-            assert config["endpoint"] == "custom-endpoint:9000"
-            assert config["access_key"] == "custom-access"
-            assert config["secret_key"] == "custom-secret"
-
-    def test_validate_s3_config_default_endpoint(self):
-        """Test default endpoint when env var not set."""
-        with patch.dict(os.environ, {}, clear=False):
-            # Remove MINIO_ENDPOINT if it exists
-            env_copy = os.environ.copy()
-            env_copy.pop("MINIO_ENDPOINT", None)
-            with patch.dict(os.environ, env_copy, clear=True):
-                config = SparkSessionManager._validate_s3_config()
-                assert "localhost:9000" in config["endpoint"]
-
-    def test_validate_s3_config_default_access_key(self):
-        """Test default access key when env var not set."""
-        with patch.dict(os.environ, {}, clear=False):
-            env_copy = os.environ.copy()
-            env_copy.pop("MINIO_ACCESS_KEY", None)
-            with patch.dict(os.environ, env_copy, clear=True):
-                config = SparkSessionManager._validate_s3_config()
-                assert config["access_key"] == "minioadmin"
-
-    def test_validate_s3_config_default_secret_key(self):
-        """Test default secret key when env var not set."""
-        with patch.dict(os.environ, {}, clear=False):
-            env_copy = os.environ.copy()
-            env_copy.pop("MINIO_SECRET_KEY", None)
-            with patch.dict(os.environ, env_copy, clear=True):
-                config = SparkSessionManager._validate_s3_config()
-                assert config["secret_key"] == "minioadmin"
-
-    def test_validate_s3_config_empty_endpoint_raises_error(self):
-        """Test that empty endpoint raises SparkSessionError."""
-        with patch.dict(os.environ, {"MINIO_ENDPOINT": ""}):
-            with pytest.raises(SparkSessionError) as exc_info:
-                SparkSessionManager._validate_s3_config()
-            assert "cannot be empty" in str(exc_info.value)
-
-    def test_validate_s3_config_strips_http_prefix(self):
-        """Test that endpoint with http:// prefix is stripped."""
-        with patch.dict(os.environ, {"MINIO_ENDPOINT": "http://localhost:9000"}):
-            # Should strip the protocol prefix
-            config = SparkSessionManager._validate_s3_config()
-            assert config["endpoint"] == "localhost:9000"
-
-    def test_validate_s3_config_strips_https_prefix(self):
-        """Test that endpoint with https:// prefix is stripped."""
-        with patch.dict(os.environ, {"MINIO_ENDPOINT": "https://localhost:9000"}):
-            # Should strip the protocol prefix
-            config = SparkSessionManager._validate_s3_config()
-            assert config["endpoint"] == "localhost:9000"
+    def test_error_with_cause(self):
+        """Test SparkSessionError can be raised with cause."""
+        original = RuntimeError("Original")
+        try:
+            raise SparkSessionError("Wrapper") from original
+        except SparkSessionError as e:
+            assert e.__cause__ is original
 
 
-class TestSparkSessionManagerClassAttributes:
-    """Tests for SparkSessionManager class attributes."""
+class TestSparkSessionManagerGetSessionValidation:
+    """Tests for SparkSessionManager.get_session input validation."""
 
-    def test_instance_initially_none(self):
-        """Test that _instance starts as None or SparkSession."""
-        # _instance could be None or an existing session
-        assert SparkSessionManager._instance is None or hasattr(
-            SparkSessionManager._instance, "sparkContext"
-        )
+    def setup_method(self):
+        """Reset singleton before each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
 
-    def test_session_config_is_dict(self):
-        """Test that _session_config is a dictionary."""
-        assert isinstance(SparkSessionManager._session_config, dict)
+    def teardown_method(self):
+        """Reset singleton after each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def test_empty_app_name_raises_error(self):
+        """Test empty app_name raises ValueError."""
+        with pytest.raises(ValueError, match="app_name cannot be empty"):
+            SparkSessionManager.get_session("")
+
+    def test_whitespace_only_app_name_raises_error(self):
+        """Test whitespace-only app_name raises ValueError."""
+        with pytest.raises(ValueError, match="app_name cannot be empty"):
+            SparkSessionManager.get_session("   ")
+
+    def test_none_app_name_raises_error(self):
+        """Test None app_name raises error."""
+        with pytest.raises((ValueError, TypeError)):
+            SparkSessionManager.get_session(None)
 
 
 class TestSparkSessionManagerStopSession:
     """Tests for SparkSessionManager.stop_session method."""
 
-    def test_stop_session_when_no_session(self):
-        """Test stop_session when no session exists."""
-        # Save current instance
-        original_instance = SparkSessionManager._instance
+    def setup_method(self):
+        """Reset singleton before each test."""
         SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
 
+    def teardown_method(self):
+        """Reset singleton after each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def test_stop_session_when_none(self):
+        """Test stop_session does not raise when no session exists."""
+        SparkSessionManager._instance = None
         # Should not raise
         SparkSessionManager.stop_session()
-
-        # Restore
-        SparkSessionManager._instance = original_instance
+        assert SparkSessionManager._instance is None
 
     def test_stop_session_clears_instance(self):
-        """Test that stop_session clears the instance."""
-        # Create a mock session
+        """Test stop_session clears the instance."""
         mock_session = MagicMock()
         SparkSessionManager._instance = mock_session
-
+        SparkSessionManager._session_config = {"app_name": "test"}
+        
         SparkSessionManager.stop_session()
-
+        
         assert SparkSessionManager._instance is None
+        assert SparkSessionManager._session_config == {}
+
+    def test_stop_session_calls_stop(self):
+        """Test stop_session calls stop on the session."""
+        mock_session = MagicMock()
+        SparkSessionManager._instance = mock_session
+        
+        SparkSessionManager.stop_session()
+        
         mock_session.stop.assert_called_once()
+
+    def test_stop_session_handles_stop_error(self):
+        """Test stop_session handles errors during stop gracefully."""
+        mock_session = MagicMock()
+        mock_session.stop.side_effect = Exception("Stop failed")
+        SparkSessionManager._instance = mock_session
+        
+        # Should not raise
+        SparkSessionManager.stop_session()
+        
+        assert SparkSessionManager._instance is None
+
+
+class TestSparkSessionManagerGetSessionInfo:
+    """Tests for SparkSessionManager.get_session_info method."""
+
+    def setup_method(self):
+        """Reset singleton before each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def teardown_method(self):
+        """Reset singleton after each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def test_get_session_info_not_initialized(self):
+        """Test get_session_info when no session exists."""
+        info = SparkSessionManager.get_session_info()
+        assert info == {"status": "not_initialized"}
+
+    def test_get_session_info_with_session(self):
+        """Test get_session_info when session exists."""
+        mock_session = MagicMock()
+        SparkSessionManager._instance = mock_session
+        SparkSessionManager._session_config = {
+            "app_name": "TestApp",
+            "gcs_project": "test-project",
+            "spark_version": "3.5.0"
+        }
+        
+        info = SparkSessionManager.get_session_info()
+        
+        assert info["status"] == "active"
+        assert info["app_name"] == "TestApp"
+        assert info["gcs_project"] == "test-project"
+
+
+class TestSparkSessionManagerEnvironmentConfig:
+    """Tests for SparkSessionManager environment variable handling."""
+
+    def setup_method(self):
+        """Reset singleton before each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def teardown_method(self):
+        """Reset singleton after each test."""
+        SparkSessionManager._instance = None
+        SparkSessionManager._session_config = {}
+
+    def test_default_project_id(self):
+        """Test default GCP project ID is used when env var not set."""
+        with patch.dict(os.environ, {}, clear=True):
+            project = os.getenv("GCP_PROJECT_ID", "")
+            assert project == ""
+
+    def test_custom_project_id_from_env(self):
+        """Test custom GCP project ID from environment."""
+        with patch.dict(os.environ, {"GCP_PROJECT_ID": "custom-project"}):
+            project = os.getenv("GCP_PROJECT_ID", "")
+            assert project == "custom-project"
+
+    def test_credentials_path_from_env(self):
+        """Test credentials path from environment."""
+        with patch.dict(os.environ, {"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/creds.json"}):
+            creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+            assert creds == "/path/to/creds.json"
